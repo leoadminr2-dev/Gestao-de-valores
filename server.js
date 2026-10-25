@@ -130,7 +130,7 @@ async function authHandler(req,res,url){
   respond(res,404,{error:'Não encontrado.'});
 }
 function staticFile(res,urlPath){
-  const paths={'/':'index.html','/index.html':'index.html','/secure-client.js':'secure-client.js',
+  const paths={'/':'index.html','/index.html':'index.html','/secure-client.js':'secure-client.js','/app-ui.js':'app-ui.js',
     '/manifest.webmanifest':'manifest.webmanifest','/sw.js':'sw.js', '/icon.svg':'icon.svg'};
   if(!paths[urlPath]){respond(res,404,{error:'Não encontrado.'});return;}
   const file=path.join(BASE,paths[urlPath]);
