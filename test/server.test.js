@@ -22,7 +22,12 @@ before(async()=>{
     }
     if(url.pathname==='/auth/token'){res.end('{"token":"aa.bb.cc"}');return;}
     if(url.pathname.includes('email-otp')){res.end('{"success":true}');return;}
-    if(url.pathname==='/auth/sign-in/email'){res.end('{"success":true}');return;}
+    if(url.pathname==='/auth/sign-in/email'){
+      if(req.headers.origin!=='https://gestao-de-valores-particular.onrender.com'){
+        res.statusCode=403;res.end('{"message":"Missing or null Origin"}');return;
+      }
+      res.end('{"success":true}');return;
+    }
     if(url.pathname==='/rest/app_state'){
       if(req.method==='PATCH'){res.end('[]');return;}
       const row=url.searchParams.get('select')==='updated_at'?{updated_at:version}:{updated_at:version,data:{participants:[{name:'Teste'}],transactions:[],loans:[],dues:[],review2026:[]}};
@@ -58,6 +63,11 @@ test('sincronização consulta só versão antes do histórico',async()=>{
 test('recusar login não autorizado',async()=>{
  const r=await call('/api/auth/login','POST',{email:'outside@example.com',password:'senha-teste-123'});
  assert.equal(r.status,403);
+});
+test('enviar Origin confiável ao Neon durante login autorizado',async()=>{
+  const r=await call('/api/auth/login','POST',{email:'Leonardo_r2@hotmail.com',password:'senha-de-teste-123'});
+  assert.equal(r.status,200);
+  assert.equal(r.data.success,true);
 });
 test('recusar gravação com revisão desatualizada',async()=>{
  const r=await call('/api/state','PUT',{version:'2026-01-01T00:00:00.000Z',data:{participants:[]}},'good');
