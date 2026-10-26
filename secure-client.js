@@ -54,7 +54,7 @@
         conflict=true;pending=null;setStatus('● Conflito: atualizar',true);
         alert('Os dados foram alterados em outro aparelho. Sua alteração não foi gravada. A página será atualizada para proteger os registros.');
         try{const fresh=await request('/api/state');version=fresh.version;window.gestaoBridge.load(fresh.data);conflict=false;setStatus('● Sincronizado');}catch{setStatus('● Atualização necessária',true);}
-      }else{pending=draft;setStatus('● Sem conexão — não salvo',true);window.gestaoBridge.notify('Não foi possível salvar no Neon. Não feche esta página; tente novamente.','error');}
+      }else{pending=pending||draft;setStatus('● Sem conexão — não salvo',true);window.gestaoBridge.notify('Não foi possível salvar no Neon. Não feche esta página; tente novamente.','error');}
     }finally{
       committing=false;
       if(pending && !conflict && authenticated && status.textContent!=='● Sem conexão — não salvo'){
