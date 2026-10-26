@@ -10,6 +10,7 @@ const { URL } = require('node:url');
 const PORT = Number(process.env.PORT || 3000);
 const AUTH_URL = String(process.env.NEON_AUTH_URL || '').replace(/\/$/, '');
 const REST_URL = String(process.env.NEON_DATA_API_URL || '').replace(/\/$/, '');
+const APP_ORIGIN = 'https://gestao-de-valores-particular.onrender.com'; // Origem publicada e autorizada no Neon Auth.
 const ALLOWED_EMAILS = new Set(String(process.env.ALLOWED_EMAILS || '')
   .split(',').map(x => x.trim().toLowerCase()).filter(Boolean));
 const BASE = __dirname;
@@ -47,7 +48,9 @@ function sessionCookieHeader(req) { return req.headers.cookie || ''; }
 async function authFetch(endpoint, {method='GET', body, cookie='', acceptJson=true}={}){
   const res = await fetch(`${AUTH_URL}/${endpoint}`,{method,headers:{
     ...(body?{'Content-Type':'application/json'}:{}), ...(cookie?{Cookie:cookie}:{}),
-    'Accept':'application/json'
+    'Accept':'application/json',
+    'Origin':APP_ORIGIN,
+    'Referer':APP_ORIGIN+'/'
   },body:body?JSON.stringify(body):undefined,redirect:'manual',signal:AbortSignal.timeout(16000)});
   let data={}; const txt=await res.text();try{data=txt?JSON.parse(txt):{};}catch{data={message:'Serviço de autenticação indisponível.'};}
   return {res,data};
