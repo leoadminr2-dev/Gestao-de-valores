@@ -91,7 +91,28 @@
   });
   $('verifyEmailBtn').addEventListener('click',async()=>{
     const email=$('loginEmail').value.trim()||currentEmail;
-    try{await request('/api/auth/verify','POST',{email});showError('Solicitação enviada. Abra seu e-mail para verificar a conta, depois entre novamente.');}catch(e){showError(e.message);}
+    try{await sendOtp(email);verificationVisible(true);showError('Código enviado ao e-mail autorizado.');}catch(e){showError(e.message);}
+  });
+  $('resendOtpButton').addEventListener('click',async()=>{
+    const email=$('loginEmail').value.trim()||currentEmail;
+    try{await sendOtp(email);showError('Novo código enviado. Verifique a caixa de entrada e o spam.');}catch(e){showError(e.message);}
+  });
+  $('backFromOtp').addEventListener('click',()=>{
+    registering=false;verificationVisible(false);clearError();
+    $('loginButton').textContent='Entrar com segurança';
+    $('switchAuth').textContent='Primeiro acesso? Criar minha senha';
+  });
+  $('otpForm').addEventListener('submit',async e=>{
+    e.preventDefault();clearError();
+    const button=$('confirmOtpButton');button.disabled=true;
+    try{
+      await request('/api/auth/confirm-otp','POST',{email:$('loginEmail').value.trim()||currentEmail,otp:$('otpCode').value.trim()});
+      registering=false;verificationVisible(false);
+      $('loginButton').textContent='Entrar com segurança';
+      $('switchAuth').textContent='Primeiro acesso? Criar minha senha';
+      try{await openPrivate();}catch{showError('E-mail confirmado. Entre com sua senha para abrir o aplicativo.');}
+    }catch(err){showError(err.message);}
+    finally{button.disabled=false;}
   });
   $('logoutButton').addEventListener('click',async()=>{
     if(pending||committing){window.gestaoBridge.notify('Existem alterações não salvas. Aguarde a confirmação do banco.','error');return;}
@@ -101,12 +122,12 @@
   window.addEventListener('online',()=>{if(pending)void flush();});
   document.addEventListener('visibilitychange',async()=>{
     if(!authenticated || document.hidden||committing||pending||conflict)return;
-    try{const fresh=await request('/api/state');if(version!==fresh.version){version=fresh.version;window.gestaoBridge.load(fresh.data);setStatus('● Atualizado por outro responsável');}}
+    try{const check=await request('/api/version');if(version!==check.version){const fresh=await request('/api/state');version=fresh.version;window.gestaoBridge.load(fresh.data);setStatus('● Atualizado por outro responsável');}}
     catch{setStatus('● Sem conexão',true);}
   });
   setInterval(async()=>{
     if(!authenticated||document.hidden||pending||committing||conflict)return;
-    try{const fresh=await request('/api/state');if(fresh.version!==version){version=fresh.version;window.gestaoBridge.load(fresh.data);setStatus('● Sincronizado');}}
+    try{const check=await request('/api/version');if(check.version!==version){const fresh=await request('/api/state');version=fresh.version;window.gestaoBridge.load(fresh.data);setStatus('● Sincronizado');}}
     catch{setStatus('● Conexão instável',true);}
   },60000);
   sessionStart();
