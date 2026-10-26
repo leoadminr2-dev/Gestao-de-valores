@@ -126,15 +126,17 @@ async function authHandler(req,res,url){
   if(req.method==='POST'&&url.pathname==='/api/auth/verify'){
     const b=await bodyJson(req);if(!validEmail(b.email)){respond(res,403,{error:'Conta não autorizada.'});return;}
     const {res:up,data}=await authFetch('email-otp/send-verification-otp',{method:'POST',body:{email:b.email,type:'email-verification'},cookie:sessionCookieHeader(req)});
-    respond(res,up.ok?200:400,{success:up.ok,...(!up.ok?{error:data?.message||'Não foi possível enviar o código.'}:{})});return;
+    const success=up.ok && data?.success!==false;
+    respond(res,success?200:400,{success,...(!success?{error:data?.message||'Não foi possível enviar o código.'}:{})});return;
   }
   if(req.method==='POST'&&url.pathname==='/api/auth/confirm-otp'){
     const b=await bodyJson(req);if(!validEmail(b.email)){respond(res,403,{error:'Conta não autorizada.'});return;}
     const otp=String(b.otp||'').trim();
     if(!/^\d{4,8}$/.test(otp)){respond(res,400,{error:'Informe o código numérico recebido por e-mail.'});return;}
     const {res:up,data}=await authFetch('email-otp/verify-email',{method:'POST',body:{email:b.email,otp},cookie:sessionCookieHeader(req)});
-    if(up.ok)passCookies(res,up);
-    respond(res,up.ok?200:400,{success:up.ok,...(!up.ok?{error:data?.message||'Código inválido ou expirado.'}:{})});return;
+    const success=up.ok && data?.success!==false;
+    if(success)passCookies(res,up);
+    respond(res,success?200:400,{success,...(!success?{error:data?.message||'Código inválido ou expirado.'}:{})});return;
   }
   if(req.method==='POST'&&url.pathname==='/api/auth/forgot'){
     const b=await bodyJson(req);if(!validEmail(b.email)){respond(res,403,{error:'Conta não autorizada.'});return;}
