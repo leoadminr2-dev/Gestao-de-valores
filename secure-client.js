@@ -6,6 +6,14 @@
   let registering=false, currentEmail='', version=null, authenticated=false;
   let pending=null, committing=false, conflict=false, saveTimeout=0;
   const status=$('secureStatus');
+  function verificationVisible(enabled){
+    $('otpGate').hidden=!enabled;
+    $('loginForm').hidden=enabled;
+    $('switchAuth').hidden=enabled;
+    $('verifyEmailBtn').hidden=true;
+    if(enabled)$('otpCode').focus();
+  }
+  async function sendOtp(email){await request('/api/auth/verify','POST',{email});}
   const showError=message=>{error.textContent=message;error.hidden=false;};
   const clearError=()=>{error.textContent='';error.hidden=true;};
   const setStatus=(s,bad=false)=>{status.textContent=s;status.style.color=bad?'#b84c59':'';status.style.background=bad?'#fff0f1':'';};
@@ -19,13 +27,13 @@
     const data=await request('/api/state');version=data.version;
     window.gestaoBridge.load(data.data);
     currentEmail=(await request('/api/session')).email;
-    gate.hidden=true;app.hidden=false;authenticated=true;clearError();setStatus('● Sincronizado');
+    verificationVisible(false);gate.hidden=true;app.hidden=false;authenticated=true;clearError();setStatus('● Sincronizado');
     if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
   }
-  function returnToLogin(message){authenticated=false;gate.hidden=false;app.hidden=true;pending=null;version=null;if(message)showError(message);}
+  function returnToLogin(message){authenticated=false;gate.hidden=false;app.hidden=true;pending=null;version=null;verificationVisible(false);if(message)showError(message);}
   async function sessionStart(){
     try{await openPrivate();}catch(e){returnToLogin(e.status===401?'Faça login para acessar o Gestão de Valores.':e.message);
-      if(e.needsVerification){$('verifyEmailBtn').hidden=false;}
+      if(e.needsVerification){verificationVisible(true);}
     }
   }
   function queueSave(data){
@@ -40,6 +48,7 @@
     try{
       const resp=await request('/api/state','PUT',{data:draft,version});version=resp.version;
       setStatus(pending?'● Alterações pendentes':'● Sincronizado');
+      if(!pending)window.gestaoBridge.notify('Alterações confirmadas no Neon.');
     }catch(e){
       if(e.status===409){
         conflict=true;pending=null;setStatus('● Conflito: atualizar',true);
@@ -58,12 +67,21 @@
     e.preventDefault();clearError();const email=$('loginEmail').value.trim();const password=$('loginPassword').value;
     const button=$('loginButton');button.disabled=true;button.textContent=registering?'Criando acesso…':'Entrando…';
     try{
-      await request(registering?'/api/auth/signup':'/api/auth/login','POST',{email,password});
+      const result=await request(registering?'/api/auth/signup':'/api/auth/login','POST',{email,password});
       currentEmail=email;
+      if(result.needsVerification){
+        verificationVisible(true);
+        showError(result.otpSent?'Enviamos um código para confirmar seu e-mail.':'Conta criada. Solicite um código de confirmação.');
+        return;
+      }
       await openPrivate();
     }catch(err){
       showError(err.needsVerification?'Verifique seu e-mail antes de entrar. Você pode solicitar o reenvio abaixo.':err.message);
-      if(err.needsVerification||registering){$('verifyEmailBtn').hidden=false;}
+      if(err.needsVerification){
+        verificationVisible(true);
+        try{await sendOtp(email);showError('Enviamos um código de confirmação para seu e-mail.');}
+        catch{showError('Confirme seu e-mail. Utilize Reenviar código.');}
+      } else if(registering){$('verifyEmailBtn').hidden=false;}
     }finally{button.disabled=false;button.textContent=registering?'Criar minha senha':'Entrar com segurança';}
   });
   $('switchAuth').addEventListener('click',()=>{
