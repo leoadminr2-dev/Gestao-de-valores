@@ -1,1 +1,15 @@
-{"name":"gestao-de-valores-particular","version":"1.0.0","private":true,"description":"Controle financeiro particular de dois responsáveis","scripts":{"start":"node server.js","test":"node --test test/server.test.js","build":"node --check server.js && node --check secure-client.js"},"engines":{"node":">=20"},"dependencies":{}}
+{
+  "name": "gestao-de-valores-particular",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Controle financeiro particular de dois responsáveis",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/server.test.js",
+    "build": "node --check server.js && node --check secure-client.js && node --check app-ui.js && npm test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {}
+}
