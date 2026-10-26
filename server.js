@@ -66,7 +66,12 @@ async function login(req,res,route){
   const {res:up,data}=await authFetch(isSignup?'sign-up/email':'sign-in/email',{method:'POST',body,cookie:sessionCookieHeader(req)});
   if(!up.ok){respond(res,up.status===401?401:400,{error:String(data.message || 'Não foi possível autenticar. Confira os dados.').slice(0,200)});return;}
   passCookies(res,up);
-  respond(res,200,{success:true,created:isSignup});
+  if(isSignup){
+    const sent=await authFetch('email-otp/send-verification-otp',{method:'POST',body:{email,type:'email-verification'}});
+    respond(res,200,{success:true,created:true,needsVerification:true,otpSent:sent.res.ok});
+    return;
+  }
+  respond(res,200,{success:true,created:false});
 }
 async function getAccess(req){
   const {res:up,data:session}=await authFetch('get-session',{cookie:sessionCookieHeader(req)});
@@ -90,6 +95,12 @@ async function dataHandler(req,res,url){
   const access=await getAccess(req);
   if(access.status!==200){respond(res,access.status,{error:access.error,needsVerification:access.needsVerification});return;}
   if(req.method==='GET' && url.pathname==='/api/session') {respond(res,200,{email:access.email});return;}
+  if(req.method==='GET' && url.pathname==='/api/version'){
+    const r=await dataApi('app_state?select=updated_at&slot=eq.primary',access);
+    if(!r.up.ok){respond(res,502,{error:'Falha ao consultar a versão dos dados.'});return;}
+    if(!Array.isArray(r.data)||r.data.length!==1){respond(res,403,{error:'Sua sessão não tem autorização para os dados.'});return;}
+    respond(res,200,{version:r.data[0].updated_at});return;
+  }
   if(req.method==='GET' && url.pathname==='/api/state'){
     const r=await dataApi('app_state?select=data,updated_at&slot=eq.primary',access);
     if(!r.up.ok){respond(res,502,{error:'Falha ao carregar os dados protegidos.'});return;}
@@ -114,8 +125,16 @@ async function authHandler(req,res,url){
   if(req.method==='POST'&&url.pathname==='/api/auth/signup')return login(req,res,'cadastro');
   if(req.method==='POST'&&url.pathname==='/api/auth/verify'){
     const b=await bodyJson(req);if(!validEmail(b.email)){respond(res,403,{error:'Conta não autorizada.'});return;}
-    const {res:up,data}=await authFetch('send-verification-email',{method:'POST',body:{email:b.email},cookie:sessionCookieHeader(req)});
-    respond(res,up.ok?200:400,{success:up.ok,...(!up.ok?{error:data?.message||'Não foi possível enviar o e-mail.'}:{})});return;
+    const {res:up,data}=await authFetch('email-otp/send-verification-otp',{method:'POST',body:{email:b.email,type:'email-verification'},cookie:sessionCookieHeader(req)});
+    respond(res,up.ok?200:400,{success:up.ok,...(!up.ok?{error:data?.message||'Não foi possível enviar o código.'}:{})});return;
+  }
+  if(req.method==='POST'&&url.pathname==='/api/auth/confirm-otp'){
+    const b=await bodyJson(req);if(!validEmail(b.email)){respond(res,403,{error:'Conta não autorizada.'});return;}
+    const otp=String(b.otp||'').trim();
+    if(!/^\d{4,8}$/.test(otp)){respond(res,400,{error:'Informe o código numérico recebido por e-mail.'});return;}
+    const {res:up,data}=await authFetch('email-otp/verify-email',{method:'POST',body:{email:b.email,otp},cookie:sessionCookieHeader(req)});
+    if(up.ok)passCookies(res,up);
+    respond(res,up.ok?200:400,{success:up.ok,...(!up.ok?{error:data?.message||'Código inválido ou expirado.'}:{})});return;
   }
   if(req.method==='POST'&&url.pathname==='/api/auth/forgot'){
     const b=await bodyJson(req);if(!validEmail(b.email)){respond(res,403,{error:'Conta não autorizada.'});return;}
@@ -150,7 +169,7 @@ const server=http.createServer(async(req,res)=>{
     if(url.pathname.startsWith('/api/')){
       if(req.method!=='GET'&&!sameOrigin(req)){respond(res,403,{error:'Origem não autorizada.'});return;}
       if(url.pathname.startsWith('/api/auth/'))await authHandler(req,res,url);
-      else if(url.pathname==='/api/state'||url.pathname==='/api/session')await dataHandler(req,res,url);
+      else if(url.pathname==='/api/state'||url.pathname==='/api/session'||url.pathname==='/api/version')await dataHandler(req,res,url);
       else respond(res,404,{error:'Não encontrado.'});
       return;
     }
