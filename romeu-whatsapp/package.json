@@ -1,0 +1,16 @@
+{
+  "name": "romeu-whatsapp",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node app.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
+}
