@@ -157,6 +157,14 @@
   function render(){nav();const pages={dashboard:pageDash,participants:pagePeople,person:pagePerson,loans:pageLoans,reconcile:pageReconcile,dues:pageDues,cash:pageCash,review:pageReview,reports:pageReports};$('view').innerHTML=`<div class="inline-tools"><span class="filteryear">Período</span><select id="year"><option value="2026" ${period==='2026'?'selected':''}>2026</option><option value="2027" ${period==='2027'?'selected':''}>2027</option><option value="todos" ${period==='todos'?'selected':''}>Todos</option></select></div>`+(pages[page]||pages.dashboard)();}
   function openForm(title,fields,done){const modal=$('modal');const rows=fields.map(f=>`<label for="f_${esc(f.key)}">${esc(f.label)}</label>${f.type==='select'?`<select id="f_${esc(f.key)}" name="${esc(f.key)}">${(f.options||[]).map(v=>`<option value="${esc(v.value)}" ${String(v.value)===String(f.value)?'selected':''}>${esc(v.label)}</option>`).join('')}</select>`:`<input id="f_${esc(f.key)}" name="${esc(f.key)}" type="${esc(f.type||'text')}" value="${esc(f.value??'')}" ${f.required?'required':''} ${f.min!==undefined?`min="${f.min}"`:''} ${f.step?`step="${f.step}"`:''}>`}`).join('');
     $('modalContent').innerHTML=`<h3>${esc(title)}</h3><form id="editForm">${rows}<div class="modalactions"><button class="secondary" type="button" id="cancelForm">Cancelar</button><button class="primary" type="submit">Salvar</button></div></form>`;modal.hidden=false;$('cancelForm').onclick=()=>modal.hidden=true;
+    $('editForm').addEventListener('change',e=>{
+      if(e.target.name!=='kind')return;
+      const category=e.target.form?.elements?.category;
+      if(!category||category.tagName!=='SELECT')return;
+      const previous=category.value,options=personCategories(e.target.value);
+      category.innerHTML=options.map(v=>'<option value="'+esc(v.value)+'">'+esc(v.label)+'</option>').join('');
+      if(options.some(v=>v.value===previous))category.value=previous;
+    });
     $('editForm').onsubmit=e=>{e.preventDefault();const v=Object.fromEntries(new FormData(e.target).entries());try{done(v);modal.hidden=true;persist();notify('Alteração enviada. Aguarde o indicador "Sincronizado" no topo.');}catch(err){notify(err.message,'error');}};
   }
   const participantOptions=()=>state.participants.slice().sort((a,b)=>a.name.localeCompare(b.name,'pt')).map(p=>({value:p.id,label:p.name}));
