@@ -1,0 +1,44 @@
+name: ROMEU Android v1 - isolated branch
+on:
+  push:
+    branches:
+      - romeu-android-v1
+    paths:
+      - .github/workflows/romeu-android.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-romeu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download independent ROMEU source
+        run: |
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://headless-dhntckvhrmt-leoadminr2-140a.wix-site-host.com/romeu-android-fonte-v1.0.zip' \
+            -o romeu-source.zip
+          unzip -t romeu-source.zip
+          mkdir romeu
+          unzip -q romeu-source.zip -d romeu
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Install Android SDK platforms
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Compile signed debug APK
+        working-directory: romeu/android
+        run: gradle --no-daemon assembleDebug
+      - name: APK checksum
+        run: sha256sum romeu/android/app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ROMEU-Android-v1-debug
+          path: romeu/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
