@@ -17,8 +17,15 @@ jobs:
       - name: Download independent ROMEU source
         run: |
           curl --fail --location --retry 3 --silent --show-error \
-            'https://headless-dhntckvhrmt-leoadminr2-140a.wix-site-host.com/romeu-android-fonte-v1.0.zip' \
-            -o romeu-source.zip
+            'https://headless-dhntckvhrmt-leoadminr2-140a.wix-site-host.com/romeu-source.js' \
+            -o romeu-source.js
+          python3 - <<'PY'
+          import re,base64,pathlib
+          text=pathlib.Path('romeu-source.js').read_text()
+          match=re.search(r'ROMEU_ANDROID_SOURCE_ZIP_B64="([A-Za-z0-9+/=]+)"',text)
+          assert match,'Pacote Android não localizado'
+          pathlib.Path('romeu-source.zip').write_bytes(base64.b64decode(match.group(1)))
+          PY
           unzip -t romeu-source.zip
           mkdir romeu
           unzip -q romeu-source.zip -d romeu
