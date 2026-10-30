@@ -1,0 +1,50 @@
+name: ROMEU Android emulator smoke
+on:
+  push:
+    branches: [romeu-android-v1]
+    paths: ['.github/workflows/romeu-smoke.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  emulator-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch APK from verified successful build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p apk
+          gh run download 41133192724 --repo leoadminr2-dev/Gestao-de-valores --name ROMEU-Android-v1-debug --dir apk
+          test -s apk/app-debug.apk
+          sha256sum apk/app-debug.apk
+      - name: Android emulator smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_3a
+          disable-animations: true
+          script: |
+            adb install -r apk/app-debug.apk
+            adb shell am start -n br.com.romeu.assistente/.MainActivity
+            sleep 12
+            adb shell dumpsys activity activities | grep -F 'br.com.romeu.assistente'
+            adb shell screencap -p /sdcard/romeu-screen.png
+            adb pull /sdcard/romeu-screen.png romeu-emulator-screen.png
+            adb shell am force-stop br.com.romeu.assistente
+            adb shell am start -n br.com.romeu.assistente/.MainActivity
+            sleep 3
+            adb shell dumpsys activity activities | grep -F 'br.com.romeu.assistente'
+      - name: Upload emulator screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ROMEU-emulator-screenshot
+          path: romeu-emulator-screen.png
+          if-no-files-found: ignore
+          retention-days: 7
