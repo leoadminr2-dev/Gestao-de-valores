@@ -103,5 +103,5 @@
      '<div class="months-grid">'+months+'</div></div>'+
      '<div class="person-categories">'+sectionPanels+'</div>'+loanTable+ledger;
   }
-  window.GestaoPersonPanel={render,section,competence,sections:SECTIONS.map(x=>x[0])};
+  window.GestaoPersonPanel={render:report,section,competence,sections:SECTIONS.map(x=>x[0])};
 })();
