@@ -14,7 +14,7 @@
   function normal(d){const s=d&&typeof d==='object'?d:{};return {...s,participants:Array.isArray(s.participants)?s.participants:[],transactions:Array.isArray(s.transactions)?s.transactions:[],loans:Array.isArray(s.loans)?s.loans:[],dues:Array.isArray(s.dues)?s.dues:[],activities:Array.isArray(s.activities)?s.activities:[],imports:Array.isArray(s.imports)?s.imports:[],review2026:Array.isArray(s.review2026)?s.review2026:[],config:s.config||{}};}
   function notify(txt,bad){const el=$('toast');el.textContent=txt;el.style.background=bad==='error'?'#ba4155':'#112340';el.hidden=false;clearTimeout(notify.t);notify.t=setTimeout(()=>el.hidden=true,4500);}
   function persist(){window.secureSync?.queueSave(structuredClone(state));render();}
-  const VIEWS=[['dashboard','◈ Painel'],['participants','♙ Participantes'],['loans','⇄ Empréstimos'],['reconcile','✓ Conciliar'],['dues','▦ Mensalidades'],['cash','▤ Livro-caixa'],['review','◇ Conferência 2026'],['reports','▧ Relatórios']];
+  const VIEWS=[['dashboard','◈ Painel'],['participants','♙ Participantes'],['loans','⇄ Empréstimos'],['reconcile','✓ Conciliar'],['dues','▦ Mensalidades'],['cash','▤ Livro-caixa'],['review','◇ Conferência 2026'],['reports','▧ Relatórios'],['rules','⚖ Regulamento']];
   function nav(){ $('nav').innerHTML=VIEWS.map(([k,l])=>`<button type="button" data-view="${k}" class="${page===k?'active':''}">${esc(l)}</button>`).join(''); $('crumb').textContent=(page==='person'?'Ficha do participante':VIEWS.find(x=>x[0]===page)?.[1])||'Gestão de Valores'; }
   const txs=()=>state.transactions.filter(byYear);
   const amount=(items)=>items.reduce((v,x)=>v+Number(x.amount||0),0);
@@ -129,8 +129,23 @@
         notes:v.notes||'',source:'Aplicativo · painel individual',createdAt:new Date().toISOString()});
     });
   }
-  function pageDues(){const d=state.dues.filter(x=>period==='todos'||String(x.month||'').startsWith(period)).filter(x=>!filter||person(x.participantId).toLowerCase().includes(filter.toLowerCase())).sort((a,b)=>String(b.month).localeCompare(String(a.month)));
-    return uiTitle('Mensalidades','Controle das cotas pagas, parciais e pendentes','new-due','+ Mensalidade')+`<div class="inline-tools"><input id="find" placeholder="Pesquisar pessoa" value="${esc(filter)}"></div>`+table(['Competência','Participante','Cotas','Previsto','Pago','Situação','Ação'],d.map(x=>`<tr>${td(esc(x.month))}${td(`<strong>${esc(person(x.participantId))}</strong>`)}${td(esc(x.quotas||1))}${td(brl(x.amount))}${td(brl(x.paidAmount||0))}${td(`<span class="chip ${x.status==='paid'?'':'warn'}">${x.status==='paid'?'Pago':x.status==='partial'?'Parcial':'Pendente'}</span>`)}${td(`<button class="action-btn" data-action="pay-due" data-id="${esc(x.id)}" ${Number(x.paidAmount||0)>=Number(x.amount)?'disabled':''}>Receber</button>`)}</tr>`));}
+  function pageDues(){
+    const d=state.dues.filter(x=>period==='todos'||String(x.month||'').startsWith(period))
+      .filter(x=>!filter||person(x.participantId).toLowerCase().includes(filter.toLowerCase()))
+      .sort((a,b)=>String(b.month).localeCompare(String(a.month)));
+    return uiTitle('Mensalidades','Vencimento dia 15 · juros de 10% tratados separadamente','new-due','+ Mensalidade')+
+      '<div class="warning">Multas e pagamentos antigos exigem comprovante. A ausência de cadastro não prova inadimplência.</div>'+
+      '<div class="inline-tools"><input id="find" placeholder="Pesquisar pessoa" value="'+esc(filter)+'"></div>'+
+      table(['Mês','Associado','Cotas','Previsto','Pago','Juros pendentes','Situação','Ação'],d.map(x=>{
+        const interestPending=Math.max(0,Number(x.lateInterestAssessed||0)-Number(x.lateInterestPaid||0));
+        const duePending=Math.max(0,Number(x.amount)-Number(x.paidAmount||0));
+        const pending=duePending>.005||interestPending>.005;
+        return '<tr>'+td(esc(x.month))+td('<strong>'+esc(person(x.participantId))+'</strong>')+
+          td(esc(x.quotas||1))+td(brl(x.amount))+td(brl(x.paidAmount||0))+td(brl(interestPending))+
+          td('<span class="chip '+(pending?'warn':'')+'">'+(pending?'Pendente / conferir':'Pago')+'</span>')+
+          td('<button class="action-btn" data-action="pay-due" data-id="'+esc(x.id)+'" '+(pending?'':'disabled')+'>Receber</button>')+'</tr>';
+      }));
+  }
   function pageCash(){const tx=txs().filter(x=>!filter||`${x.description||''} ${x.category||''} ${person(x.participantId)}`.toLowerCase().includes(filter.toLowerCase())).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     return uiTitle('Livro-caixa','Histórico de entradas e saídas da caixinha','new-tx','+ Lançamento')+`<div class="inline-tools"><input id="find" placeholder="Buscar descrição ou pessoa" value="${esc(filter)}"></div>`+table(['Data','Natureza','Categoria','Pessoa','Descrição','Valor'],tx.map(x=>`<tr>${td(day(x.date))}${td(x.kind==='in'?'<span class="chip">Entrada</span>':'<span class="chip warn">Saída</span>')}${td(esc(x.category||''))}${td(esc(person(x.participantId)))}${td(esc(x.description||''))}${td(`<strong>${brl(x.amount)}</strong>`)}</tr>`));}
   function pageReview(){const rev=state.review2026.filter(x=>!filter||`${x.person||''} ${x.detail||''} ${x.category||''}`.toLowerCase().includes(filter.toLowerCase()));return uiTitle('Conferência de 2026','Registros incompletos preservados, sem lançar saldo fictício')+`<div class="warning">Os registros listados abaixo não devem alterar o saldo sem verificação. Consulte o histórico do WhatsApp e os comprovantes.</div><div class="inline-tools"><input id="find" placeholder="Buscar pessoa ou observação" value="${esc(filter)}"><span class="muted">${rev.length} para verificar</span></div>`+table(['Data','Pessoa','Classificação','Valor citado','Observação'],rev.slice(0,250).map(x=>`<tr>${td(day(x.date))}${td(`<strong>${esc(x.person)}</strong>`)}${td(esc(x.category))}${td(x.amount===null?'—':brl(x.amount))}${td(`<div class="muted">${esc(String(x.detail||'').slice(0,240))}</div>`)}</tr>`))+(rev.length>250?'<p class="muted">Exibindo os primeiros 250 para economizar dados. Use o campo de busca para localizar os demais.</p>':'');}
@@ -154,8 +169,49 @@
     if(personal)cards.push(['Compras particulares a conferir',brl(Number(personal.confirmedPersonalAmountCents||0)/100),'Valor bruto declarado particular; reposições ainda não abatidas']);
     return '<div class="panel"><h3>Saúde da conferência bancária — 2026</h3><p class="note">Dados da auditoria documental (Caixa e Itaú). Valores bancários e lançamentos do aplicativo não são bases equivalentes; não calcule desfalque subtraindo os totais.</p><div class="kpis">'+cards.map(c=>'<div class="kpi"><div class="key">'+esc(c[0])+'</div><div class="value">'+esc(c[1])+'</div><div class="note">'+esc(c[2])+'</div></div>').join('')+'</div><p class="note">Nenhum pagamento é duplicado por aparecer primeiro na conta da Tatiana e depois na conta do Leonardo. Contratos sem identificação nominal permanecem em revisão.</p></div>';
   }
+
+  function pageRules(){
+    const r=window.CaixinhaRules;if(!r)return '<div class="warning">Motor do regulamento indisponível.</div>';
+    const c=state.config||{};
+    const rules=[
+      'Cada associado pode adquirir de 1 a 10 cotas de R$ 50,00.',
+      'Mensalidades vencem no dia 15. Após o vencimento, juros de 10% sobre a mensalidade devida.',
+      'Três meses consecutivos de inadimplência: exclusão e perda dos valores pagos, SOMENTE após conferência e decisão do responsável.',
+      'Contribuição adicional por cota: R$ 20 (jan–abr), R$ 30 (mai–ago), R$ 40 (set–nov). Total R$ 70, R$ 80 ou R$ 90 por mês.',
+      'O associado pode adquirir empréstimo até o mês de outubro.',
+      'Taxa de juros do empréstimo para associado: 20%.',
+      'Todos os associados devem participar de todos os sorteios, rifas e eventos.',
+      'Empréstimos liberados a partir de 01/02/2026.',
+      'Limite de empréstimo: R$ 50 × 11 meses × número de cotas (até R$ 5.500).',
+      'Empréstimos devem estar quitados até 30/11/2026; saldo remanescente previsto para desconto no encerramento.',
+      'Taxa administrativa: 4% do valor bruto apurado a receber.',
+      'Cada rifa exige a mesma quantidade de bilhetes que as cotas do associado; R$ 10 por bilhete.',
+      'Encerramento até 10/12/2026, com devolução das cotas e acréscimo da parcela apurada conforme fechamento.'
+    ];
+    const rows=state.participants.filter(x=>x.active).map(p=>{
+      const id=p.id,settlement=r.settlement({quotas:p.quotas});
+      const loans=state.loans.filter(l=>l.participantId===id&&l.status!=='paid');
+      const open=loans.reduce((total,l)=>total+Math.max(0,loanTotal(l)-Number(l.paidTotal||0)),0);
+      const delinquency=r.lateMonths({participantId:id,dues:state.dues,asOf:today()});
+      return '<tr><td>'+esc(p.name)+'</td><td>'+esc(p.quotas)+'</td><td>'+brl(settlement.baseAccumulated||0)+'</td><td>'+brl(open)+'</td><td>'+
+        (delinquency.reviewRequired?'<span class="chip warn">Conferir 3 meses</span>':'<span class="chip">Histórico a conferir</span>')+'</td><td><strong>Pendente de apuração</strong></td></tr>';
+    });
+    return uiTitle('Regulamento oficial — Caixinha 2026','Regras e projeção do encerramento sem lançamentos artificiais')+
+      '<div class="panel"><h3>Pagamento</h3><p class="note">Recebedora: '+esc(c.pixReceiverName||'Tatiana Abreu')+
+      ' · Chave Pix cadastrada no acesso privado: '+esc(c.pixKey?'final '+String(c.pixKey).slice(-2):'não cadastrada')+
+      ' · vencimento das mensalidades em 15 de cada mês.</p></div>'+
+      '<div class="kpis">'+[
+         ['Valor por cota',brl(50),'Base mensal'],['Limite de cotas','10','Por participante'],
+         ['Multa por atraso','10%','Juros sobre mensalidade devida'],
+         ['Taxa administrativa','4%','Sobre valor bruto a receber']
+        ].map(k=>'<div class="kpi"><div class="key">'+esc(k[0])+'</div><div class="value">'+esc(k[1])+'</div><div class="note">'+esc(k[2])+'</div></div>').join('')+'</div>'+
+      '<div class="panel"><h3>Regras vigentes</h3><ol class="rule-list">'+rules.map(v=>'<li>'+esc(v)+'</li>').join('')+'</ol></div>'+
+      '<div class="panel"><h3>Projeção de encerramento — associados ativos</h3>'+
+      '<p class="warning">Valores de base são previsão da mensalidade de R$ 50 × 11, não saldo efetivamente pago. Juros e repasses existentes não estão totalmente conciliados. Não há cálculo de rateio de excedente confirmado. A perda de cotas ou desconto de empréstimo NÃO é executada automaticamente.</p></div>'+
+      table(['Associado','Cotas','Cotas-base de referência','Saldo contratual bruto','Situação','Líquido a distribuir'],rows);
+  }
   function pageReports(){const t=txs(),group={};t.forEach(x=>{const k=x.category||'Outros';(group[k]??={ins:0,outs:0})[x.kind==='in'?'ins':'outs']+=Number(x.amount)||0;});return uiTitle('Relatórios e backup','Resumo de categorias, exportações e segurança')+`<div class="panel"><h3>Relatório por categoria</h3><div class="table-wrap"><table><thead><tr><th>Categoria</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr></thead><tbody>${Object.entries(group).map(([k,v])=>`<tr>${td(esc(k))}${td(brl(v.ins))}${td(brl(v.outs))}${td(`<strong>${brl(v.ins-v.outs)}</strong>`)}</tr>`).join('')}</tbody></table></div></div><div class="panel"><h3>Exportação e segurança</h3><p class="note">As informações permanecem no banco Neon com acesso por conta autenticada. Faça um backup privado periodicamente e guarde em local seguro.</p><div class="inline-tools"><button class="primary" data-action="backup">Baixar backup JSON</button><button class="secondary" data-action="export-csv">Exportar lançamentos CSV</button></div></div>`+bankAuditSummary();}
-  function render(){nav();const pages={dashboard:pageDash,participants:pagePeople,person:pagePerson,loans:pageLoans,reconcile:pageReconcile,dues:pageDues,cash:pageCash,review:pageReview,reports:pageReports};$('view').innerHTML=`<div class="inline-tools"><span class="filteryear">Período</span><select id="year"><option value="2026" ${period==='2026'?'selected':''}>2026</option><option value="2027" ${period==='2027'?'selected':''}>2027</option><option value="todos" ${period==='todos'?'selected':''}>Todos</option></select></div>`+(pages[page]||pages.dashboard)();}
+  function render(){nav();const pages={dashboard:pageDash,participants:pagePeople,person:pagePerson,loans:pageLoans,reconcile:pageReconcile,dues:pageDues,cash:pageCash,review:pageReview,reports:pageReports,rules:pageRules};$('view').innerHTML=`<div class="inline-tools"><span class="filteryear">Período</span><select id="year"><option value="2026" ${period==='2026'?'selected':''}>2026</option><option value="2027" ${period==='2027'?'selected':''}>2027</option><option value="todos" ${period==='todos'?'selected':''}>Todos</option></select></div>`+(pages[page]||pages.dashboard)();}
   function openForm(title,fields,done){const modal=$('modal');const rows=fields.map(f=>`<label for="f_${esc(f.key)}">${esc(f.label)}</label>${f.type==='select'?`<select id="f_${esc(f.key)}" name="${esc(f.key)}">${(f.options||[]).map(v=>`<option value="${esc(v.value)}" ${String(v.value)===String(f.value)?'selected':''}>${esc(v.label)}</option>`).join('')}</select>`:`<input id="f_${esc(f.key)}" name="${esc(f.key)}" type="${esc(f.type||'text')}" value="${esc(f.value??'')}" ${f.required?'required':''} ${f.min!==undefined?`min="${f.min}"`:''} ${f.step?`step="${f.step}"`:''}>`}`).join('');
     $('modalContent').innerHTML=`<h3>${esc(title)}</h3><form id="editForm">${rows}<div class="modalactions"><button class="secondary" type="button" id="cancelForm">Cancelar</button><button class="primary" type="submit">Salvar</button></div></form>`;modal.hidden=false;$('cancelForm').onclick=()=>modal.hidden=true;
     $('editForm').addEventListener('change',e=>{
@@ -170,7 +226,33 @@
   }
   const participantOptions=()=>state.participants.slice().sort((a,b)=>a.name.localeCompare(b.name,'pt')).map(p=>({value:p.id,label:p.name}));
   function newPerson(old){openForm(old?'Editar participante':'Novo participante',[{key:'name',label:'Nome completo',value:old?.name||'',required:true},{key:'phone',label:'Telefone',value:old?.phone||''},{key:'quotas',label:'Quantidade de cotas',type:'number',min:1,value:old?.quotas||1,required:true},{key:'active',label:'Situação',type:'select',value:old?.active===false?'no':'yes',options:[{value:'yes',label:'Ativo'},{value:'no',label:'Inativo'}]}],v=>{if(!v.name.trim())throw Error('Informe o nome.');if(!(Number(v.quotas)>0&&Number(v.quotas)<=10))throw Error('Cotas entre 1 e 10.');const p=old||{id:newID('person'),createdAt:new Date().toISOString()};Object.assign(p,{name:v.name.trim(),phone:v.phone.trim(),quotas:Number(v.quotas),active:v.active==='yes'});if(!old)state.participants.push(p);});}
-  function newLoan(){if(!state.participants.length){notify('Cadastre uma pessoa primeiro.','error');return;}openForm('Conceder empréstimo',[{key:'participantId',label:'Participante',type:'select',options:participantOptions()},{key:'principal',label:'Valor emprestado (R$)',type:'number',step:'0.01',min:0.01,required:true},{key:'rate',label:'Juros (%)',type:'number',step:'0.01',min:0,value:state.config.loanRate??20},{key:'date',label:'Data',type:'date',value:today(),required:true},{key:'dueDate',label:'Vencimento',type:'date',value:''}],v=>{const amount=Number(v.principal),rate=Number(v.rate);if(!(amount>0&&rate>=0))throw Error('Preencha valores válidos.');const l={id:newID('loan'),participantId:v.participantId,principal:amount,rate,interestMode:'flat',date:v.date,dueDate:v.dueDate||null,paidTotal:0,status:'open',createdAt:new Date().toISOString()};state.loans.push(l);state.transactions.push({id:newID('tx'),date:v.date,kind:'out',amount,category:'Empréstimo concedido',participantId:v.participantId,loanId:l.id,description:`Empréstimo · ${person(v.participantId)}`,source:'Aplicativo',createdAt:new Date().toISOString()});});}
+  function newLoan(){
+    if(!state.participants.length)return notify('Cadastre um associado primeiro.','error');
+    const rules=window.CaixinhaRules;
+    if(!rules)return notify('Regulamento indisponível. Atualize a página.','error');
+    openForm('Empréstimo para associado · regras 2026',[
+      {key:'participantId',label:'Associado (ativo)',type:'select',options:participantOptions()},
+      {key:'principal',label:'Valor emprestado (R$)',type:'number',step:'0.01',min:0.01,required:true},
+      {key:'date',label:'Data da concessão',type:'date',value:today(),required:true},
+      {key:'dueDate',label:'Vencimento final (até 30/11)',type:'date',value:'2026-11-30',required:true},
+      {key:'notes',label:'Observação sobre a conferência dos empréstimos anteriores'}
+    ],v=>{
+      const member=state.participants.find(p=>p.id===v.participantId);
+      if(!member)throw Error('Associado não encontrado.');
+      const principal=Number(v.principal);
+      const checked=rules.loanCheck({participant:member,date:v.date,principal,loans:state.loans});
+      if(!checked.ok)throw Error(checked.reason);
+      if(v.dueDate<'2026-02-01'||v.dueDate>'2026-11-30'||v.dueDate<v.date)throw Error('Vencimento máximo 30/11/2026, posterior à concessão.');
+      const l={id:newID('loan'),participantId:v.participantId,principal:Math.round(principal*100)/100,
+        rate:20,interestMode:'flat',date:v.date,dueDate:v.dueDate,paidTotal:0,status:'open',
+        notes:v.notes||'',createdAt:new Date().toISOString()};
+      state.loans.push(l);
+      state.transactions.push({id:newID('tx'),date:v.date,kind:'out',amount:l.principal,
+        category:'Empréstimo concedido',participantId:v.participantId,loanId:l.id,
+        description:'Empréstimo · '+person(v.participantId),source:'Aplicativo',
+        createdAt:new Date().toISOString()});
+    });
+  }
   function payLoan(id){const l=state.loans.find(x=>x.id===id);if(!l)return;const left=Math.max(0,loanTotal(l)-Number(l.paidTotal||0));openForm('Registrar devolução',[{key:'amount',label:`Valor recebido (máximo ${brl(left)})`,type:'number',min:0.01,step:'0.01',required:true},{key:'date',label:'Data da devolução',type:'date',value:today(),required:true},{key:'notes',label:'Observações'}],v=>{const a=Number(v.amount);if(!(a>0&&a<=left+0.005))throw Error('Valor maior que o saldo ou inválido.');l.paidTotal=Number(l.paidTotal||0)+a;l.status=l.paidTotal>=loanTotal(l)-0.005?'paid':'partial';state.transactions.push({id:newID('tx'),date:v.date,kind:'in',amount:a,category:'Devolução de empréstimo',participantId:l.participantId,loanId:l.id,description:`Devolução · ${person(l.participantId)}`,notes:v.notes,source:'Aplicativo',createdAt:new Date().toISOString()});});}
   function newDue(){
     if(!state.participants.length)return notify('Cadastre uma pessoa primeiro.','error');
@@ -196,7 +278,46 @@
         source:'Aplicativo · tabela por cota 2026',createdAt:new Date().toISOString()});
     });
   }
-  function payDue(id){const d=state.dues.find(x=>x.id===id);if(!d)return;const left=Number(d.amount)-Number(d.paidAmount||0);openForm('Receber mensalidade',[{key:'amount',label:`Valor recebido (saldo ${brl(left)})`,type:'number',min:0.01,step:'0.01',required:true},{key:'date',label:'Data do pagamento',type:'date',value:today(),required:true}],v=>{const a=Number(v.amount);if(!(a>0&&a<=left+0.005))throw Error('Pagamento inválido.');d.paidAmount=Number(d.paidAmount||0)+a;d.status=d.paidAmount>=Number(d.amount)-0.005?'paid':'partial';d.paidDate=v.date;state.transactions.push({id:newID('tx'),date:v.date,kind:'in',amount:a,category:'Mensalidade',participantId:d.participantId,dueId:d.id,description:`Mensalidade ${d.month} · ${person(d.participantId)}`,source:'Aplicativo',createdAt:new Date().toISOString()});});}
+  function payDue(id){
+    const d=state.dues.find(x=>x.id===id);
+    if(!d)return;
+    const left=Math.max(0,Number(d.amount)-Number(d.paidAmount||0));
+    const assessed=Number(d.lateInterestAssessed||0);
+    const paidLate=Number(d.lateInterestPaid||0);
+    openForm('Receber mensalidade e juros de atraso',[
+      {key:'amount',label:'Mensalidade recebida (saldo '+brl(left)+')',type:'number',min:0,step:'0.01',value:left,required:true},
+      {key:'lateInterestPaid',label:'Juros 10% efetivamente recebidos (R$)',type:'number',min:0,step:'0.01',value:0,required:true},
+      {key:'date',label:'Data efetiva do recebimento',type:'date',value:today(),required:true}
+    ],v=>{
+      const r=window.CaixinhaRules;
+      if(!r)throw Error('Regulamento não carregado.');
+      const principal=Number(v.amount),interest=Number(v.lateInterestPaid);
+      if(!Number.isFinite(principal)||!Number.isFinite(interest)||principal<0||principal>left+.005||interest<0||principal+interest<=0)
+        throw Error('Valores recebidos inválidos.');
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(v.date))throw Error('Data inválida.');
+      const calculated=r.lateFee({dueAmount:d.amount,month:d.month,paymentDate:v.date});
+      const fullAssessment=Math.max(assessed,calculated);
+      if(interest>fullAssessment-paidLate+.005)throw Error('Juros excedem os 10% previstos ou já foram recebidos.');
+      // Juros lançados na dívida não são receita; receita só com recebimento confirmado.
+      d.lateInterestAssessed=Math.round(fullAssessment*100)/100;
+      d.lateInterestPaid=Math.round((paidLate+interest)*100)/100;
+      if(principal>0){
+        d.paidAmount=Math.round((Number(d.paidAmount||0)+principal)*100)/100;
+        d.status=d.paidAmount>=Number(d.amount)-.005?'paid':'partial';
+        d.paidDate=v.date;
+        state.transactions.push({id:newID('tx'),date:v.date,kind:'in',amount:principal,
+          category:'Mensalidade',participantId:d.participantId,dueId:d.id,competence:d.month,
+          description:'Mensalidade '+d.month+' · '+person(d.participantId),
+          source:'Aplicativo',createdAt:new Date().toISOString()});
+      }
+      if(interest>0){
+        state.transactions.push({id:newID('tx'),date:v.date,kind:'in',amount:interest,
+          category:'Juros de mensalidade',participantId:d.participantId,dueId:d.id,competence:d.month,
+          description:'Juros de atraso '+d.month+' · '+person(d.participantId),
+          source:'Aplicativo',createdAt:new Date().toISOString()});
+      }
+    });
+  }
   function newTx(){openForm('Novo lançamento financeiro',[{key:'kind',label:'Movimento',type:'select',options:[{value:'in',label:'Entrada'},{value:'out',label:'Saída'}]},{key:'amount',label:'Valor (R$)',type:'number',min:0.01,step:'0.01',required:true},{key:'category',label:'Categoria',required:true},{key:'date',label:'Data',type:'date',value:today(),required:true},{key:'description',label:'Descrição',required:true},{key:'participantId',label:'Participante (opcional)',type:'select',options:[{value:'',label:'Sem vínculo'},...participantOptions()]}],v=>{if(!(Number(v.amount)>0))throw Error('Valor inválido.');state.transactions.push({id:newID('tx'),date:v.date,kind:v.kind,amount:Number(v.amount),category:v.category,description:v.description,participantId:v.participantId||null,source:'Aplicativo',createdAt:new Date().toISOString()});});}
   function download(name,content,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const el=document.createElement('a');el.href=url;el.download=name;el.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function backup(){download(`Gestao_Valores_Backup_${today()}.json`,JSON.stringify({...state,exportedAt:new Date().toISOString()},null,2),'application/json');}
