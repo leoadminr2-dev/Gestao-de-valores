@@ -39,6 +39,9 @@
     const rafflePerQuota=Number(state.config?.rafflePricePerQuota??10);
     const quotas=Number(participant.quotas)||0;
     const now=new Date().toISOString().slice(0,7);
+    const today=new Date().toISOString().slice(0,10);
+    const official=typeof window!=='undefined'?window.CaixinhaRules:null;
+    const stale=official?.lateMonths({dues,participantId:id,asOf:today});
     const months=MONTHS.map((name,i)=>{
       const m=year+'-'+String(i+1).padStart(2,'0');
       const records=dues.filter(d=>d.month===m);
@@ -58,11 +61,19 @@
       let status=paid>0?'Valor registrado':m>now?'Futuro • sem registro':'Sem conferência';
       if(hasDue&&records.every(d=>d.status==='paid')&&paid>0)status='Pago no cadastro';
       else if(paid>0&&expected!==null&&paid+0.005<expected)status='Parcial / conferir';
+      const assessed=records.reduce((total,d)=>{
+        const paidDate=d.paidDate||(Number(d.paidAmount||0)>=Number(d.amount||0)?'':today);
+        const needReview=paidDate>m+'-15'&&Number(d.amount||0)>0;
+        return total+Math.max(Number(d.lateInterestAssessed||0),needReview&&official?official.lateFee({month:m,dueAmount:d.amount,paymentDate:paidDate}):0);
+      },0);
+      const interestPaid=records.reduce((total,d)=>total+Number(d.lateInterestPaid||0),0);
+      const interestOpen=Math.max(0,assessed-interestPaid);
       return '<article class="month-card"><div class="month-head"><strong>'+name+'</strong><span>'+esc(status)+'</span></div>'+
        (baseReference===null?'':'<div class="month-breakdown"><span>Mensalidade-base</span><strong>'+brl(baseReference)+'</strong></div>')+
        (extraReference===null?'':'<div class="month-breakdown"><span>Adicional mensal</span><strong>'+brl(extraReference)+'</strong></div>')+
        '<div class="month-fig"><small>Total previsto'+(hasDue?' cadastrado':' de referência')+'</small><strong>'+(expected===null?'Não definido':brl(expected))+'</strong></div>'+
        '<div class="month-fig"><small>Recebido / registrado</small><strong>'+brl(paid)+'</strong></div>'+
+       (interestOpen>0?'<div class="month-fig"><small>Juros de atraso 10% — conferir cobrança</small><strong>'+brl(interestOpen)+'</strong></div>':'')+
        '<div class="month-foot">'+esc(flags)+'</div></article>';
     }).join('');
     const sectionPanels=SECTIONS.slice(1).map(([key,label])=>{
@@ -108,11 +119,15 @@
     const ledger='<section class="panel"><h3>Movimentações da pessoa</h3>'+
     '<p class="note">Reclassificar altera somente a classificação do lançamento, nunca cria outra entrada ou altera seu valor. Contratos vinculados são protegidos.</p>'+
     (transactionRows?'<div class="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th>Valor</th><th>Ação</th></tr></thead><tbody>'+transactionRows+'</tbody></table></div>':'<p class="person-empty">Sem lançamentos individuais neste período.</p>')+'</section>';
-    return header+kpis+
+    const threeMonthAlert=stale?.reviewRequired?
+      '<div class="warning">Há 3 ou mais competências seguidas com cobrança cadastrada sem quitação confirmada. Verificar extratos e pagamentos antes de qualquer exclusão ou perda de cotas. Nenhum bloqueio automático foi feito.</div>':'';
+    const payout=official?.settlement({quotas});
+    const settlementProjection=payout&&year==='2026'?'<div class="panel"><h3>Encerramento da caixinha — até 10 de dezembro</h3><p class="note">Valor-base teórico das cotas (R$ 50 × 11 meses): <strong>'+brl(payout.baseAccumulated)+'</strong>. Taxa administrativa de 4% sobre o valor bruto apurado; saldos de empréstimos até 30/11 poderão ser compensados. Distribuição final depende de conferir todas as entradas, eventos, juros e parcela apurada. Nenhuma quantia líquida definida e nenhum desconto executado.</p></div>':'';
+    return header+kpis+threeMonthAlert+
      '<div class="panel"><h3>Mensalidades — janeiro a novembro de '+esc(year)+'</h3>'+
      '<p class="note">Por cota, em 2026: mensalidade-base de R$ 50,00 + adicional de R$ 20,00 (jan–abr), R$ 30,00 (mai–ago) ou R$ 40,00 (set–nov). Os valores do adicional não são lançados novamente no caixa. Não confundir com juros/penalidades já registrados separadamente. Sem comprovante significa <b>sem conferência</b>, não necessariamente atraso. Quando a competência não está indicada, o mês da entrada é apenas provisório.</p>'+
      '<div class="months-grid">'+months+'</div></div>'+
-     '<div class="person-categories">'+sectionPanels+'</div>'+loanTable+ledger;
+     '<div class="person-categories">'+sectionPanels+'</div>'+loanTable+settlementProjection+ledger;
   }
   window.GestaoPersonPanel={render:report,section,competence,sections:SECTIONS.map(x=>x[0])};
 })();
