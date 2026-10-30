@@ -90,3 +90,11 @@ test('módulo de painel individual é servido sem dados pessoais estáticos',asy
   assert.ok(js.includes('GestaoPersonPanel'));
   assert.ok(!js.includes('person_45dc04978da4fa82dc'));
 });
+
+test('regulamento oficial é servido como módulo sem informações bancárias pessoais',async()=>{
+  const r=await fetch(app+'/caixinha-rules.js');
+  assert.equal(r.status,200);
+  const js=await r.text();
+  assert.ok(js.includes('CaixinhaRules'));
+  assert.ok(!js.includes('054.209.647-16'));
+});
