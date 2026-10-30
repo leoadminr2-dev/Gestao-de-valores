@@ -82,3 +82,11 @@ test('service worker não armazena respostas privadas',async()=>{
  assert.equal(r.status,200);const source=await r.text();
  assert.ok(source.includes('install'));assert.ok(!source.includes('/api/state'));
 });
+
+test('módulo de painel individual é servido sem dados pessoais estáticos',async()=>{
+  const r=await fetch(app+'/participant-panel.js');
+  assert.equal(r.status,200);
+  const js=await r.text();
+  assert.ok(js.includes('GestaoPersonPanel'));
+  assert.ok(!js.includes('person_45dc04978da4fa82dc'));
+});

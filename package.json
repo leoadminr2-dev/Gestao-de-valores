@@ -5,8 +5,8 @@
   "description": "Controle financeiro particular de dois responsáveis",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/server.test.js",
-    "build": "node --check server.js && node --check secure-client.js && node --check app-ui.js && npm test"
+    "test": "node --test test/*.test.js",
+    "build": "node --check server.js && node --check secure-client.js && node --check participant-panel.js && node --check app-ui.js && npm test"
   },
   "engines": {
     "node": ">=20"
