@@ -11,7 +11,7 @@ function harness(){
   const panel=sandbox.window.GestaoPersonPanel;
   const participant={id:'p1',name:'Pessoa <exemplo>',quotas:2,active:true};
   const state={
-    config:{fees:[70,70,70,70,80,80,80,80,90,90,90,null]},
+    config:{fees:[70,70,70,70,80,80,80,80,90,90,90,null],monthlyBasePerQuota:50,monthlyAdditionalPerQuota2026:[20,20,20,20,30,30,30,30,40,40,40],rafflePricePerQuota:10},
     transactions:[
       {id:'a',participantId:'p1',date:'2026-01-15',category:'Mensalidade',kind:'in',amount:140,description:'Janeiro'},
       {id:'b',participantId:'p1',date:'2026-02-15',category:'Juros de mensalidade',kind:'in',amount:10,description:'Juros'},
@@ -59,4 +59,38 @@ test('informação do participante é escapada e nenhuma movimentação é feita
   assert.doesNotMatch(html,/Pessoa <exemplo>/);
   assert.equal(JSON.stringify(state),old);
   assert.equal(panel.section('Devolução de empréstimo'),'Pagamento de empréstimo');
+});
+
+test('10 cotas exibem R$500 de mensalidade, adicionais 200/300/400 e rifa R$100',()=>{
+  const {state,participant,render}=harness();
+  participant.quotas=10;
+  state.transactions=[];
+  state.dues=[];
+  const html=render();
+  const month=name=>{
+    const begin=html.indexOf('>'+name+'</strong>');
+    const end=html.indexOf('class="month-card"',begin+2);
+    return html.slice(begin,end<0?html.length:end);
+  };
+  assert.match(month('Janeiro'),/R\$ 500\.00/);
+  assert.match(month('Janeiro'),/R\$ 200\.00/);
+  assert.match(month('Janeiro'),/R\$ 700\.00/);
+  assert.match(month('Maio'),/R\$ 300\.00/);
+  assert.match(month('Maio'),/R\$ 800\.00/);
+  assert.match(month('Setembro'),/R\$ 400\.00/);
+  assert.match(month('Setembro'),/R\$ 900\.00/);
+  assert.match(html,/Referência por rifa/);
+  assert.match(html,/R\$ 100\.00/);
+  assert.equal(state.transactions.length,0,'renderização não cria receitas');
+  assert.equal(state.dues.length,0,'renderização não cria cobranças');
+});
+test('status ativo por recorrência é exibido sem marcar pagamentos como mensalidade',()=>{
+  const {state,participant,render}=harness();
+  participant.active=true;
+  participant.activationEvidence={monthsWithPayments:8};
+  const html=render();
+  assert.match(html,/depósitos recorrentes/);
+  assert.match(html,/8 meses/);
+  assert.equal(state.dues.length,1);
+  assert.equal(state.transactions.length,6);
 });
