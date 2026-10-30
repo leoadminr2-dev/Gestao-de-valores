@@ -34,6 +34,9 @@
     const loanUnlinked=yearTx.filter(t=>section(t.category)==='Pagamento de empréstimo'&&!t.loanId);
     const uncertain=sum(loanUnlinked);
     const fees=year==='2026'&&Array.isArray(state.config?.fees)?state.config.fees:[];
+    const basePerQuota=year==='2026'?Number(state.config?.monthlyBasePerQuota??50):null;
+    const additionPerQuota=year==='2026'&&Array.isArray(state.config?.monthlyAdditionalPerQuota2026)?state.config.monthlyAdditionalPerQuota2026:[];
+    const rafflePerQuota=Number(state.config?.rafflePricePerQuota??10);
     const quotas=Number(participant.quotas)||0;
     const now=new Date().toISOString().slice(0,7);
     const months=MONTHS.map((name,i)=>{
@@ -43,6 +46,9 @@
       const byTx=sum(assigned), byDue=records.reduce((a,d)=>a+Number(d.paidAmount||0),0);
       // Mensalidade registrada tanto no contrato quanto no livro-caixa não entra duas vezes.
       const paid=Math.max(byTx,byDue);
+      const additional=additionPerQuota[i]===undefined||additionPerQuota[i]===null?null:Number(additionPerQuota[i]);
+      const baseReference=basePerQuota!==null&&quotas>0?basePerQuota*quotas:null;
+      const extraReference=additional!==null&&Number.isFinite(additional)&&quotas>0?additional*quotas:null;
       const reference=Number(fees[i]);
       const forecast=fees[i]!==null&&fees[i]!==undefined&&Number.isFinite(reference)&&quotas>0?reference*quotas:null;
       const expected=records.length?records.reduce((a,d)=>a+Number(d.amount||0),0):forecast;
@@ -53,7 +59,9 @@
       if(hasDue&&records.every(d=>d.status==='paid')&&paid>0)status='Pago no cadastro';
       else if(paid>0&&expected!==null&&paid+0.005<expected)status='Parcial / conferir';
       return '<article class="month-card"><div class="month-head"><strong>'+name+'</strong><span>'+esc(status)+'</span></div>'+
-       '<div class="month-fig"><small>Previsto'+(hasDue?' cadastrado':' de referência')+'</small><strong>'+(expected===null?'Não definido':brl(expected))+'</strong></div>'+
+       (baseReference===null?'':'<div class="month-breakdown"><span>Mensalidade-base</span><strong>'+brl(baseReference)+'</strong></div>')+
+       (extraReference===null?'':'<div class="month-breakdown"><span>Adicional mensal</span><strong>'+brl(extraReference)+'</strong></div>')+
+       '<div class="month-fig"><small>Total previsto'+(hasDue?' cadastrado':' de referência')+'</small><strong>'+(expected===null?'Não definido':brl(expected))+'</strong></div>'+
        '<div class="month-fig"><small>Recebido / registrado</small><strong>'+brl(paid)+'</strong></div>'+
        '<div class="month-foot">'+esc(flags)+'</div></article>';
     }).join('');
@@ -64,7 +72,8 @@
         const aux=key==='Evento'&&t.eventName?' · '+t.eventName:'';
         return '<li><span>'+day(t.date)+' · '+esc(t.description||label+aux)+'</span><strong>'+esc(t.kind==='out'?'− ':'+ ')+brl(t.amount)+'</strong></li>';
       }).join('');
-      return '<section class="person-section"><div class="person-section-head"><div><h3>'+esc(label)+'</h3><small>'+rows.length+' lançamento(s)</small></div><div><strong>'+brl(incoming)+'</strong><small>Entradas'+(outgoing?' · Saídas '+brl(outgoing):'')+'</small></div></div>'+
+      const raffleNote=key==='Rifa'&&quotas>0?'<p class="person-raffle-reference">Referência por rifa: '+brl(rafflePerQuota)+' × '+quotas+' cota(s) = <strong>'+brl(rafflePerQuota*quotas)+'</strong> (somente quando houver cobrança, não gera dívida).</p>':'';
+      return '<section class="person-section"><div class="person-section-head"><div><h3>'+esc(label)+'</h3><small>'+rows.length+' lançamento(s)</small></div><div><strong>'+brl(incoming)+'</strong><small>Entradas'+(outgoing?' · Saídas '+brl(outgoing):'')+'</small></div></div>'+raffleNote+
       (rows.length?'<ul class="person-entries">'+lines+'</ul>':'<p class="person-empty">Nenhum valor comprovado nesta categoria.</p>')+'</section>';
     }).join('');
     const loanRows=personLoans.map(l=>{
@@ -83,8 +92,10 @@
     const linkedPaymentCount=yearTx.filter(t=>section(t.category)==='Pagamento de empréstimo'&&t.loanId).length;
     const header='<div class="person-hero"><div><span class="person-eyebrow">FICHA FINANCEIRA INDIVIDUAL</span><h2>'+esc(participant.name)+'</h2><p>'+
       esc(quotas?quotas+' cota(s)':'Cotas ainda não identificadas')+' · '+esc(participant.active===false?'Inativo':'Ativo')+
+      (participant.activationEvidence?'<span class="bank-evidence-badge"> • Atividade confirmada por depósitos recorrentes ('+esc(participant.activationEvidence.monthsWithPayments)+' meses)</span>':'')+
       '</p></div><div class="person-actions"><button type="button" class="secondary" data-action="back-participants">← Voltar</button>'+
-      '<button type="button" class="primary" data-action="new-person-tx" data-id="'+esc(id)+'">+ Registrar valor</button></div></div>';
+      '<button type="button" class="primary" data-action="new-person-tx" data-id="'+esc(id)+'">+ Registrar valor</button>'+
+      '<button type="button" class="secondary" data-action="new-person-raffle" data-id="'+esc(id)+'">+ Registrar rifa</button></div></div>';
     const kpis='<div class="kpis">'+[
       ['Recebimentos registrados',brl(confirmedIn),'Soma de entradas existentes, sem duplicar repasses'],
       ['Saídas registradas',brl(confirmedOut),'Empréstimos e outras saídas já lançadas'],
@@ -99,7 +110,7 @@
     (transactionRows?'<div class="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th>Valor</th><th>Ação</th></tr></thead><tbody>'+transactionRows+'</tbody></table></div>':'<p class="person-empty">Sem lançamentos individuais neste período.</p>')+'</section>';
     return header+kpis+
      '<div class="panel"><h3>Mensalidades — janeiro a novembro de '+esc(year)+'</h3>'+
-     '<p class="note">Previsão por cotas usa a tabela do sistema e não cria cobranças. Sem comprovante significa <b>sem conferência</b>, não necessariamente atraso. Quando a competência não está indicada, o mês da entrada é apenas provisório.</p>'+
+     '<p class="note">Por cota, em 2026: mensalidade-base de R$ 50,00 + adicional de R$ 20,00 (jan–abr), R$ 30,00 (mai–ago) ou R$ 40,00 (set–nov). Os valores do adicional não são lançados novamente no caixa. Não confundir com juros/penalidades já registrados separadamente. Sem comprovante significa <b>sem conferência</b>, não necessariamente atraso. Quando a competência não está indicada, o mês da entrada é apenas provisório.</p>'+
      '<div class="months-grid">'+months+'</div></div>'+
      '<div class="person-categories">'+sectionPanels+'</div>'+loanTable+ledger;
   }
