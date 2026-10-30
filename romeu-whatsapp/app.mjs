@@ -128,5 +128,6 @@ export function startServer(env=process.env,opts={}){
 if(process.argv[1]&&new URL(import.meta.url).pathname===process.argv[1]){
   const env=process.env;
   const store=env.DATABASE_URL?await makeStore(env.DATABASE_URL):null;
+  if(store){try{await store.ping();console.log('ROMEU Neon database connection: OK');}catch(e){console.error('ROMEU Neon database connection: FAILED',String(e?.code||'unknown'));}}
   startServer(env,{store});
 }
