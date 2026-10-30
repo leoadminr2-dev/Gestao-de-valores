@@ -129,8 +129,23 @@
         notes:v.notes||'',source:'Aplicativo · painel individual',createdAt:new Date().toISOString()});
     });
   }
-  function pageDues(){const d=state.dues.filter(x=>period==='todos'||String(x.month||'').startsWith(period)).filter(x=>!filter||person(x.participantId).toLowerCase().includes(filter.toLowerCase())).sort((a,b)=>String(b.month).localeCompare(String(a.month)));
-    return uiTitle('Mensalidades','Controle das cotas pagas, parciais e pendentes','new-due','+ Mensalidade')+`<div class="inline-tools"><input id="find" placeholder="Pesquisar pessoa" value="${esc(filter)}"></div>`+table(['Competência','Participante','Cotas','Previsto','Pago','Situação','Ação'],d.map(x=>`<tr>${td(esc(x.month))}${td(`<strong>${esc(person(x.participantId))}</strong>`)}${td(esc(x.quotas||1))}${td(brl(x.amount))}${td(brl(x.paidAmount||0))}${td(`<span class="chip ${x.status==='paid'?'':'warn'}">${x.status==='paid'?'Pago':x.status==='partial'?'Parcial':'Pendente'}</span>`)}${td(`<button class="action-btn" data-action="pay-due" data-id="${esc(x.id)}" ${Number(x.paidAmount||0)>=Number(x.amount)?'disabled':''}>Receber</button>`)}</tr>`));}
+  function pageDues(){
+    const d=state.dues.filter(x=>period==='todos'||String(x.month||'').startsWith(period))
+      .filter(x=>!filter||person(x.participantId).toLowerCase().includes(filter.toLowerCase()))
+      .sort((a,b)=>String(b.month).localeCompare(String(a.month)));
+    return uiTitle('Mensalidades','Vencimento dia 15 · juros de 10% tratados separadamente','new-due','+ Mensalidade')+
+      '<div class="warning">Multas e pagamentos antigos exigem comprovante. A ausência de cadastro não prova inadimplência.</div>'+
+      '<div class="inline-tools"><input id="find" placeholder="Pesquisar pessoa" value="'+esc(filter)+'"></div>'+
+      table(['Mês','Associado','Cotas','Previsto','Pago','Juros pendentes','Situação','Ação'],d.map(x=>{
+        const interestPending=Math.max(0,Number(x.lateInterestAssessed||0)-Number(x.lateInterestPaid||0));
+        const duePending=Math.max(0,Number(x.amount)-Number(x.paidAmount||0));
+        const pending=duePending>.005||interestPending>.005;
+        return '<tr>'+td(esc(x.month))+td('<strong>'+esc(person(x.participantId))+'</strong>')+
+          td(esc(x.quotas||1))+td(brl(x.amount))+td(brl(x.paidAmount||0))+td(brl(interestPending))+
+          td('<span class="chip '+(pending?'warn':'')+'">'+(pending?'Pendente / conferir':'Pago')+'</span>')+
+          td('<button class="action-btn" data-action="pay-due" data-id="'+esc(x.id)+'" '+(pending?'':'disabled')+'>Receber</button>')+'</tr>';
+      }));
+  }
   function pageCash(){const tx=txs().filter(x=>!filter||`${x.description||''} ${x.category||''} ${person(x.participantId)}`.toLowerCase().includes(filter.toLowerCase())).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     return uiTitle('Livro-caixa','Histórico de entradas e saídas da caixinha','new-tx','+ Lançamento')+`<div class="inline-tools"><input id="find" placeholder="Buscar descrição ou pessoa" value="${esc(filter)}"></div>`+table(['Data','Natureza','Categoria','Pessoa','Descrição','Valor'],tx.map(x=>`<tr>${td(day(x.date))}${td(x.kind==='in'?'<span class="chip">Entrada</span>':'<span class="chip warn">Saída</span>')}${td(esc(x.category||''))}${td(esc(person(x.participantId)))}${td(esc(x.description||''))}${td(`<strong>${brl(x.amount)}</strong>`)}</tr>`));}
   function pageReview(){const rev=state.review2026.filter(x=>!filter||`${x.person||''} ${x.detail||''} ${x.category||''}`.toLowerCase().includes(filter.toLowerCase()));return uiTitle('Conferência de 2026','Registros incompletos preservados, sem lançar saldo fictício')+`<div class="warning">Os registros listados abaixo não devem alterar o saldo sem verificação. Consulte o histórico do WhatsApp e os comprovantes.</div><div class="inline-tools"><input id="find" placeholder="Buscar pessoa ou observação" value="${esc(filter)}"><span class="muted">${rev.length} para verificar</span></div>`+table(['Data','Pessoa','Classificação','Valor citado','Observação'],rev.slice(0,250).map(x=>`<tr>${td(day(x.date))}${td(`<strong>${esc(x.person)}</strong>`)}${td(esc(x.category))}${td(x.amount===null?'—':brl(x.amount))}${td(`<div class="muted">${esc(String(x.detail||'').slice(0,240))}</div>`)}</tr>`))+(rev.length>250?'<p class="muted">Exibindo os primeiros 250 para economizar dados. Use o campo de busca para localizar os demais.</p>':'');}
@@ -262,7 +277,46 @@
         source:'Aplicativo · tabela por cota 2026',createdAt:new Date().toISOString()});
     });
   }
-  function payDue(id){const d=state.dues.find(x=>x.id===id);if(!d)return;const left=Number(d.amount)-Number(d.paidAmount||0);openForm('Receber mensalidade',[{key:'amount',label:`Valor recebido (saldo ${brl(left)})`,type:'number',min:0.01,step:'0.01',required:true},{key:'date',label:'Data do pagamento',type:'date',value:today(),required:true}],v=>{const a=Number(v.amount);if(!(a>0&&a<=left+0.005))throw Error('Pagamento inválido.');d.paidAmount=Number(d.paidAmount||0)+a;d.status=d.paidAmount>=Number(d.amount)-0.005?'paid':'partial';d.paidDate=v.date;state.transactions.push({id:newID('tx'),date:v.date,kind:'in',amount:a,category:'Mensalidade',participantId:d.participantId,dueId:d.id,description:`Mensalidade ${d.month} · ${person(d.participantId)}`,source:'Aplicativo',createdAt:new Date().toISOString()});});}
+  function payDue(id){
+    const d=state.dues.find(x=>x.id===id);
+    if(!d)return;
+    const left=Math.max(0,Number(d.amount)-Number(d.paidAmount||0));
+    const assessed=Number(d.lateInterestAssessed||0);
+    const paidLate=Number(d.lateInterestPaid||0);
+    openForm('Receber mensalidade e juros de atraso',[
+      {key:'amount',label:'Mensalidade recebida (saldo '+brl(left)+')',type:'number',min:0,step:'0.01',value:left,required:true},
+      {key:'lateInterestPaid',label:'Juros 10% efetivamente recebidos (R$)',type:'number',min:0,step:'0.01',value:0,required:true},
+      {key:'date',label:'Data efetiva do recebimento',type:'date',value:today(),required:true}
+    ],v=>{
+      const r=window.CaixinhaRules;
+      if(!r)throw Error('Regulamento não carregado.');
+      const principal=Number(v.amount),interest=Number(v.lateInterestPaid);
+      if(!Number.isFinite(principal)||!Number.isFinite(interest)||principal<0||principal>left+.005||interest<0||principal+interest<=0)
+        throw Error('Valores recebidos inválidos.');
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(v.date))throw Error('Data inválida.');
+      const calculated=r.lateFee({dueAmount:d.amount,month:d.month,paymentDate:v.date});
+      const fullAssessment=Math.max(assessed,calculated);
+      if(interest>fullAssessment-paidLate+.005)throw Error('Juros excedem os 10% previstos ou já foram recebidos.');
+      // Juros lançados na dívida não são receita; receita só com recebimento confirmado.
+      d.lateInterestAssessed=Math.round(fullAssessment*100)/100;
+      d.lateInterestPaid=Math.round((paidLate+interest)*100)/100;
+      if(principal>0){
+        d.paidAmount=Math.round((Number(d.paidAmount||0)+principal)*100)/100;
+        d.status=d.paidAmount>=Number(d.amount)-.005?'paid':'partial';
+        d.paidDate=v.date;
+        state.transactions.push({id:newID('tx'),date:v.date,kind:'in',amount:principal,
+          category:'Mensalidade',participantId:d.participantId,dueId:d.id,competence:d.month,
+          description:'Mensalidade '+d.month+' · '+person(d.participantId),
+          source:'Aplicativo',createdAt:new Date().toISOString()});
+      }
+      if(interest>0){
+        state.transactions.push({id:newID('tx'),date:v.date,kind:'in',amount:interest,
+          category:'Juros de mensalidade',participantId:d.participantId,dueId:d.id,competence:d.month,
+          description:'Juros de atraso '+d.month+' · '+person(d.participantId),
+          source:'Aplicativo',createdAt:new Date().toISOString()});
+      }
+    });
+  }
   function newTx(){openForm('Novo lançamento financeiro',[{key:'kind',label:'Movimento',type:'select',options:[{value:'in',label:'Entrada'},{value:'out',label:'Saída'}]},{key:'amount',label:'Valor (R$)',type:'number',min:0.01,step:'0.01',required:true},{key:'category',label:'Categoria',required:true},{key:'date',label:'Data',type:'date',value:today(),required:true},{key:'description',label:'Descrição',required:true},{key:'participantId',label:'Participante (opcional)',type:'select',options:[{value:'',label:'Sem vínculo'},...participantOptions()]}],v=>{if(!(Number(v.amount)>0))throw Error('Valor inválido.');state.transactions.push({id:newID('tx'),date:v.date,kind:v.kind,amount:Number(v.amount),category:v.category,description:v.description,participantId:v.participantId||null,source:'Aplicativo',createdAt:new Date().toISOString()});});}
   function download(name,content,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const el=document.createElement('a');el.href=url;el.download=name;el.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function backup(){download(`Gestao_Valores_Backup_${today()}.json`,JSON.stringify({...state,exportedAt:new Date().toISOString()},null,2),'application/json');}
