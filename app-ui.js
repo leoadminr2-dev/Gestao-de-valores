@@ -253,7 +253,33 @@
         createdAt:new Date().toISOString()});
     });
   }
-  function payLoan(id){const l=state.loans.find(x=>x.id===id);if(!l)return;const left=Math.max(0,loanTotal(l)-Number(l.paidTotal||0));openForm('Registrar devolução',[{key:'amount',label:`Valor recebido (máximo ${brl(left)})`,type:'number',min:0.01,step:'0.01',required:true},{key:'date',label:'Data da devolução',type:'date',value:today(),required:true},{key:'notes',label:'Observações'}],v=>{const a=Number(v.amount);if(!(a>0&&a<=left+0.005))throw Error('Valor maior que o saldo ou inválido.');l.paidTotal=Number(l.paidTotal||0)+a;l.status=l.paidTotal>=loanTotal(l)-0.005?'paid':'partial';state.transactions.push({id:newID('tx'),date:v.date,kind:'in',amount:a,category:'Devolução de empréstimo',participantId:l.participantId,loanId:l.id,description:`Devolução · ${person(l.participantId)}`,notes:v.notes,source:'Aplicativo',createdAt:new Date().toISOString()});});}
+  function payLoan(id){
+    const l=state.loans.find(x=>x.id===id);if(!l)return;
+    const left=Math.max(0,loanTotal(l)-Number(l.paidTotal||0));
+    if(left<=0.005)return notify('Contrato sem saldo disponível.','error');
+    const payments=state.transactions.filter(t=>t.loanId===id&&t.kind==='in');
+    const principalPaid=amount(payments.filter(t=>['Pagamento de empréstimo','Devolução de empréstimo'].includes(t.category)));
+    const interestPaid=amount(payments.filter(t=>t.category==='Juros de empréstimo'));
+    const principalMax=Math.max(0,Number(l.principal)-principalPaid);
+    const interestMax=Math.max(0,Number(l.principal)*Number(l.rate||0)/100-interestPaid);
+    openForm('Devolução e juros separados',[
+      {key:'principal',label:'Devolução principal (máximo '+brl(principalMax)+')',type:'number',min:0,step:'0.01',value:Math.min(left,principalMax)},
+      {key:'interest',label:'Juros recebidos (máximo '+brl(interestMax)+')',type:'number',min:0,step:'0.01',value:0},
+      {key:'date',label:'Data',type:'date',value:today(),required:true}
+    ],v=>{
+      const p=Number(v.principal),j=Number(v.interest);
+      if(!Number.isFinite(p)||!Number.isFinite(j)||p<0||j<0||p+j<=0||p>principalMax+.005||j>interestMax+.005||p+j>left+.005)
+        throw Error('Pagamento excede principal, juros ou saldo do contrato.');
+      const group=newID('pay');
+      for(const [value,category] of [[p,'Pagamento de empréstimo'],[j,'Juros de empréstimo']]){
+        if(value>0)state.transactions.push({id:newID('tx'),date:v.date,kind:'in',amount:Math.round(value*100)/100,
+          category,participantId:l.participantId,loanId:id,paymentGroupId:group,
+          description:category+' · '+person(l.participantId),source:'Aplicativo',createdAt:new Date().toISOString()});
+      }
+      l.paidTotal=Math.round((Number(l.paidTotal||0)+p+j)*100)/100;
+      l.status=l.paidTotal>=loanTotal(l)-.005?'paid':'partial';
+    });
+  }
   function newDue(preferredId){
     if(!state.participants.length)return notify('Cadastre uma pessoa primeiro.','error');
     const base=Number(state.config?.monthlyBasePerQuota??50);
