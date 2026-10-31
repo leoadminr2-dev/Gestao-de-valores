@@ -19,16 +19,16 @@ function harness(){
   }
   const sandbox={window,document,FormData:FakeFormData,structuredClone,
     setTimeout:()=>1,clearTimeout:()=>{}};
-  for(const file of ['caixinha-rules.js','participant-panel.js','app-ui.js'])
+  for(const file of ['caixinha-rules.js','nominal-audit.js','participant-panel.js','app-ui.js'])
     vm.runInNewContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),sandbox,{timeout:2000,filename:file});
   const state={participants:[{id:'p1',name:'Pessoa teste',active:true,quotas:1,
-    bankEvidence2026:[{id:'credit1',date:'2026-05-18',amount:880,source:'Itaú',memo:'PIX TESTE',status:'pending'},{id:'credit2',date:'2026-05-18',amount:70,source:'Itaú',memo:'PIX TESTE',status:'pending'}]}],
+    bankEvidence2026:[{id:'credit1',date:'2026-05-18',amount:880,source:'Itaú',memo:'PIX PESSOA',status:'pending'},{id:'credit2',date:'2026-05-18',amount:70,source:'Itaú',memo:'PIX TESTE',status:'pending'}]}],
     transactions:[],dues:[],loans:[],review2026:[],
     config:{fees:[70,70,70,70,80,80,80,80,90,90,90],monthlyBasePerQuota:50,monthlyAdditionalPerQuota2026:[20,20,20,20,30,30,30,30,40,40,40],rafflePricePerQuota:10}};
   window.gestaoBridge.load(state);
   const action=(type,evidenceId='credit1')=>listeners.click({target:{closest:s=>s==='[data-action]'?{dataset:{action:type,id:'p1',evidenceId}}:null}});
   const submit=fields=>{const form=element('editForm');form.fields=fields;form.onsubmit({preventDefault(){},target:form});};
-  const fields=(rest={})=>({decision:'caixinha',monthly:800,monthlyInterest:80,raffle:0,event:0,loanReturn:0,loanInterest:0,competence:'2026-05',eventName:'',notes:'Comprovante conferido',confirm:'yes',...rest});
+  const fields=(rest={})=>({decision:'caixinha',monthly:800,monthlyInterest:80,raffle:0,event:0,loanReturn:0,loanInterest:0,competence:'2026-05',eventName:'',notes:'Comprovante conferido',payerFullName:'Pessoa Teste',payerRelation:'associado',confirm:'yes',...rest});
   return {window,element,action,submit,fields,state};
 }
 
