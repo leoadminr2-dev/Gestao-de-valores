@@ -97,7 +97,7 @@ test('status ativo por recorrência é exibido sem marcar pagamentos como mensal
 
 test('ficha destaca sete categorias sem somar créditos do extrato ao caixa',()=>{
   const {state,participant,render}=harness();
-  participant.bankEvidence2026=[{date:'2026-05-18',amount:880,memo:'ALESSAN',status:'pending'}];
+  participant.bankEvidence2026=[{date:'2026-05-18',amount:880,memo:'ALIAS EXEMPLO',status:'pending'}];
   const before=JSON.stringify(state),html=render();
   assert.equal((html.match(/class="value-category-card"/g)||[]).length,7);
   for(const title of ['Mensalidades','Juros da mensalidade','Rifas','Eventos','Empréstimo','Devolução do empréstimo','Juros do empréstimo'])
@@ -124,5 +124,18 @@ test('linha da planilha mantém evidência bancaria separada e vazio não equiva
   assert.match(html,/Sem conferência/);
   assert.match(html,/Valores de extrato ainda não conciliados/);
   assert.match(html,/não cobrança automática/);
+  assert.equal(JSON.stringify(state),before);
+});
+
+test('crédito bancário que soma devolução e juros já lançados gera alerta, sem duplicar',()=>{
+  const {state,participant,render}=harness();
+  state.transactions=[
+    {id:'p1',participantId:participant.id,date:'2026-10-02',kind:'in',category:'Pagamento de empréstimo',amount:750},
+    {id:'j1',participantId:participant.id,date:'2026-10-02',kind:'in',category:'Juros de empréstimo',amount:150}
+  ];
+  participant.bankEvidence2026=[{id:'bank',date:'2026-10-02',amount:900,memo:'PIX MODELO',status:'pending'}];
+  const before=JSON.stringify(state),html=render();
+  assert.match(html,/Possível duplicidade/);
+  assert.match(html,/não lançar/);
   assert.equal(JSON.stringify(state),before);
 });

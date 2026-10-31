@@ -109,13 +109,17 @@
     const evidence=p?.bankEvidence2026?.find(x=>x.id===evidenceId);
     if(!p||!evidence)return notify('Comprovante não localizado.','error');
     if(evidence.status!=='pending')return notify('Depósito já classificado ou descartado.','error');
-    if(state.transactions.some(t=>t.sourceBankEvidenceId===evidenceId||t.bankReceiptKey===evidence.bankReceiptKey))
+    if(state.transactions.some(t=>t.sourceBankEvidenceId===evidenceId||(evidence.bankReceiptKey&&t.bankReceiptKey===evidence.bankReceiptKey)))
       return notify('Este crédito já tem vínculo no livro-caixa; revisar sem lançar novamente.','error');
     const posted=state.transactions.filter(t=>t.participantId===id&&t.date===evidence.date&&t.kind==='in');
     const postedTotal=amount(posted);
     const detail=postedTotal>0?' Há '+brl(postedTotal)+' em lançamentos já registrados no mesmo dia; confirme para evitar duplicidade.':'';
     openForm('Classificar depósito de '+brl(evidence.amount)+' — '+p.name,[
       {key:'decision',label:'Finalidade do depósito',type:'select',options:[{value:'caixinha',label:'Pertence à caixinha — lançar por categoria'},{value:'excluded',label:'Não pertence à caixinha — não lançar'}]},
+      {key:'payerFullName',label:'Nome e sobrenome COMPLETOS do remetente no comprovante (não use apenas o nome abreviado do extrato)',value:''},
+      {key:'payerRelation',label:'Relação do remetente com o associado',type:'select',options:[
+        {value:'',label:'Não confirmada'},{value:'associado',label:'Mesmo primeiro e segundo nome do associado'},{value:'apelido',label:'Nome civil diferente do cadastro/apelido (explicar)'},{value:'terceiro',label:'Outra pessoa depositou para o associado (explicar)'}
+      ]},
       {key:'monthly',label:'Mensalidade (R$)',type:'number',value:0,min:0,step:'0.01'},
       {key:'monthlyInterest',label:'Juros da mensalidade (R$)',type:'number',value:0,min:0,step:'0.01'},
       {key:'raffle',label:'Rifas (R$)',type:'number',value:0,min:0,step:'0.01'},
@@ -136,6 +140,19 @@
         evidence.classifiedAt=new Date().toISOString();
         return;
       }
+      const payerFullName=String(v.payerFullName||'').trim().replace(/\s+/g,' ');
+      if(payerFullName.split(' ').length<2)throw Error('Confira e informe primeiro e segundo nome do remetente no comprovante completo.');
+      if(!['associado','terceiro','apelido'].includes(v.payerRelation))throw Error('Confirme a relação entre o remetente e o associado.');
+      if(v.payerRelation==='associado'){
+        const normalizeName=window.GestaoNominalAudit?.normalize||((str)=>String(str||'').trim().toUpperCase());
+        const registered=normalizeName(p.name).split(' '),verified=normalizeName(payerFullName).split(' ');
+        if(registered.length<2||verified[0]!==registered[0]||verified[1]!==registered[1])
+          throw Error('Primeiro e segundo nome diferem do cadastro. Corrija o nome ou escolha a exceção explicada no comprovante.');
+      }
+      if(['terceiro','apelido'].includes(v.payerRelation)&&String(v.notes||'').trim().length<12)throw Error('Explique o vínculo, o apelido ou a divergência e indique o comprovante.');
+      const bankAliasCheck=window.GestaoNominalAudit?.check(evidence.memo,{name:payerFullName},[{name:payerFullName}]);
+      if(bankAliasCheck&&['nome_divergente','segundo_nome_divergente'].includes(bankAliasCheck.level))
+        throw Error('O nome informado não corresponde ao nome abreviado do banco. Revise a identidade antes de lançar.');
       const alloc=[
         ['monthly','Mensalidade'],
         ['monthlyInterest','Juros de mensalidade'],
@@ -152,8 +169,8 @@
         throw Error('Confirme a competência da mensalidade.');
       if(values.some(x=>x.category==='Evento'&&x.cents>0)&&!String(v.eventName||'').trim())
         throw Error('Informe o nome do evento.');
-      if(postedTotal>0&&posted.some(t=>Math.abs(Number(t.amount)-Number(evidence.amount))<0.005))
-        throw Error('Já há lançamento de igual valor no mesmo dia. Verifique a possível duplicidade.');
+      if(postedTotal>0&&(posted.some(t=>Math.abs(Number(t.amount)-Number(evidence.amount))<0.005)||Math.abs(postedTotal-Number(evidence.amount))<0.005))
+        throw Error('Já existem valores no mesmo dia cuja soma pode corresponder ao depósito. Confirme e vincule o comprovante sem lançar outra entrada.');
       const postedIds=[];
       values.filter(x=>x.cents>0).forEach(x=>{
         const txId=newID('tx');
@@ -172,6 +189,8 @@
       evidence.status='classified';evidence.classificationTransactions=postedIds;
       evidence.classificationBreakdown=values.filter(x=>x.cents>0).map(x=>({category:x.category,amount:x.cents/100}));
       evidence.classificationNotes=v.notes.trim();evidence.classifiedAt=new Date().toISOString();
+      evidence.verifiedPayerFullName=payerFullName;
+      evidence.verifiedPayerRelation=v.payerRelation;
     });
   }
   function newPersonTransaction(id,preset=''){
@@ -218,7 +237,23 @@
   }
   function pageCash(){const tx=txs().filter(x=>!filter||`${x.description||''} ${x.category||''} ${person(x.participantId)}`.toLowerCase().includes(filter.toLowerCase())).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     return uiTitle('Livro-caixa','Histórico de entradas e saídas da caixinha','new-tx','+ Lançamento')+`<div class="inline-tools"><input id="find" placeholder="Buscar descrição ou pessoa" value="${esc(filter)}"></div>`+table(['Data','Natureza','Categoria','Pessoa','Descrição','Valor'],tx.map(x=>`<tr>${td(day(x.date))}${td(x.kind==='in'?'<span class="chip">Entrada</span>':'<span class="chip warn">Saída</span>')}${td(esc(x.category||''))}${td(esc(person(x.participantId)))}${td(esc(x.description||''))}${td(`<strong>${brl(x.amount)}</strong>`)}</tr>`));}
-  function pageReview(){const rev=state.review2026.filter(x=>!filter||`${x.person||''} ${x.detail||''} ${x.category||''}`.toLowerCase().includes(filter.toLowerCase()));return uiTitle('Conferência de 2026','Registros incompletos preservados, sem lançar saldo fictício')+`<div class="warning">Os registros listados abaixo não devem alterar o saldo sem verificação. Consulte o histórico do WhatsApp e os comprovantes.</div><div class="inline-tools"><input id="find" placeholder="Buscar pessoa ou observação" value="${esc(filter)}"><span class="muted">${rev.length} para verificar</span></div>`+table(['Data','Pessoa','Classificação','Valor citado','Observação'],rev.slice(0,250).map(x=>`<tr>${td(day(x.date))}${td(`<strong>${esc(x.person)}</strong>`)}${td(esc(x.category))}${td(x.amount===null?'—':brl(x.amount))}${td(`<div class="muted">${esc(String(x.detail||'').slice(0,240))}</div>`)}</tr>`))+(rev.length>250?'<p class="muted">Exibindo os primeiros 250 para economizar dados. Use o campo de busca para localizar os demais.</p>':'');}
+  function nominalAuditSummary(){
+    const a=state.audit2026?.nominalReview20261031;
+    if(!a)return '';
+    const groups=Array.isArray(a.ambiguousAliases)?a.ambiguousAliases:[];
+    const riskTotal=groups.reduce((sum,g)=>sum+Number(g.depositCount||0),0);
+    const riskMoney=groups.reduce((sum,g)=>sum+Number(g.amountCents||0)/100,0);
+    return '<section class="panel"><h3>Conferência nominal — primeiro e segundo nomes</h3>'+
+      '<p class="warning">Nomes abreviados não comprovam identidade. Há '+riskTotal+' créditos ('+brl(riskMoney)+') em grupos com homônimos, não lançados nem atribuídos a associados.</p>'+
+      '<p class="note">Dos '+esc(a.matchedToEvidence)+' depósitos vinculados a fichas, '+esc(a.nameLevels?.firstOnly||0)+' mostram somente o primeiro nome, '+
+      esc(a.nameLevels?.firstSecondAbbrev||0)+' mostram início do segundo, '+
+      esc(a.nameLevels?.registryMissingSecond||0)+' não têm segundo nome no cadastro e '+
+      esc(a.nameLevels?.nickname||0)+' dependem de apelido. Todos exigem documento de identificação do remetente.</p>'+
+      '<div class="table-wrap"><table><thead><tr><th>Nome abreviado do banco</th><th>Pessoas possíveis</th><th>Depósitos</th><th>Valor bancário (não classificado)</th></tr></thead><tbody>'+
+      groups.map(g=>'<tr><td><strong>'+esc(g.bankAlias)+'</strong></td><td>'+esc((g.possibleParticipants||[]).join(' / '))+'</td><td>'+esc(g.depositCount)+'</td><td>'+brl(Number(g.amountCents||0)/100)+'</td></tr>').join('')+
+      '</tbody></table></div><p class="note">O segundo nome completo deve ser conferido no comprovante original. Pagamento por terceiros só pode ser atribuído após comprovar o vínculo com o associado.</p></section>';
+  }
+  function pageReview(){const rev=state.review2026.filter(x=>!filter||`${x.person||''} ${x.detail||''} ${x.category||''}`.toLowerCase().includes(filter.toLowerCase()));return uiTitle('Conferência de 2026','Registros incompletos preservados, sem lançar saldo fictício')+nominalAuditSummary()+`<div class="warning">Os registros listados abaixo não devem alterar o saldo sem verificação. Consulte o histórico do WhatsApp e os comprovantes.</div><div class="inline-tools"><input id="find" placeholder="Buscar pessoa ou observação" value="${esc(filter)}"><span class="muted">${rev.length} para verificar</span></div>`+table(['Data','Pessoa','Classificação','Valor citado','Observação'],rev.slice(0,250).map(x=>`<tr>${td(day(x.date))}${td(`<strong>${esc(x.person)}</strong>`)}${td(esc(x.category))}${td(x.amount===null?'—':brl(x.amount))}${td(`<div class="muted">${esc(String(x.detail||'').slice(0,240))}</div>`)}</tr>`))+(rev.length>250?'<p class="muted">Exibindo os primeiros 250 para economizar dados. Use o campo de busca para localizar os demais.</p>':'');}
   function bankAuditSummary(){
     const audit=state.audit2026||{};
     const bank=audit.bankLoanReconciliation, tatiana=audit.tatianaItauJanJunReconciliation;

@@ -98,3 +98,11 @@ test('regulamento oficial é servido como módulo sem informações bancárias p
   assert.ok(js.includes('CaixinhaRules'));
   assert.ok(!js.includes('054.209.647-16'));
 });
+
+test('entregar comparador nominal sem expor associados ou extratos no JavaScript publico',async()=>{
+  const r=await fetch(app+'/nominal-audit.js');
+  assert.equal(r.status,200);
+  const js=await r.text();
+  assert.ok(js.includes('GestaoNominalAudit'));
+  assert.ok(!js.includes('Alessandra Alves'));
+});

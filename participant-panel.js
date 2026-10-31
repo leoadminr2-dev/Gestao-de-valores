@@ -172,11 +172,21 @@
     const evidence=Array.isArray(participant.bankEvidence2026)?participant.bankEvidence2026.filter(x=>isYear(x.date,year)):[];
     const pending=evidence.filter(x=>x.status==='pending');
     const pendingAmount=pending.reduce((n,x)=>n+Number(x.amount||0),0);
+    const nominalAudit=typeof window!=='undefined'?window.GestaoNominalAudit:null;
+    const bankNameAssessment=nominalAudit?evidence.map(x=>nominalAudit.check(x.memo,participant,state.participants)):[];
+    const nameHighRisk=bankNameAssessment.filter(x=>x.risk==='high').length;
+    const possiblyBooked=evidence.filter(x=>{
+      const existing=tx.filter(t=>t.kind==='in'&&t.date===x.date);
+      return x.status==='pending'&&existing.length>0&&Math.abs(sum(existing)-Number(x.amount))<0.005;
+    });
+
     const proof='<section class="panel"><h3>Extratos bancários — a classificar</h3>'+
-      '<p class="note">Os comprovantes devem ser conferidos antes de separar mensalidade, juros, rifa, evento ou empréstimo. Valores pendentes não são somados ao livro-caixa.</p>'+
+      '<p class="note">O extrato pode mostrar apenas o primeiro nome ou o início do segundo. A comparação de nomes é uma triagem, não comprova titularidade. Exija comprovante com nome completo antes de atribuir valores.</p>'+
+      (possiblyBooked.length?'<p class="warning">'+possiblyBooked.length+' crédito(s) podem já estar contabilizados em várias categorias no mesmo dia. Confira os valores existentes antes de lançar.</p>':'')+
+
       (evidence.length?'<p><strong>'+brl(pendingAmount)+'</strong> · '+pending.length+' depósito(s) pendentes de classificação</p>'+
-        '<div class="table-wrap"><table><thead><tr><th>Data</th><th>Referência</th><th>Valor</th><th>Situação</th><th>Conferência</th></tr></thead><tbody>'+
-        evidence.map(x=>'<tr><td>'+day(x.date)+'</td><td>'+esc(x.memo||'Extrato')+'</td><td>'+brl(x.amount)+'</td><td>'+esc(x.status==='pending'?'A conferir':x.status==='excluded'?'Fora da caixinha':'Classificado')+'</td><td>'+(x.status==='pending'?'<button type="button" class="action-btn" data-action="classify-bank-evidence" data-id="'+esc(id)+'" data-evidence-id="'+esc(x.id)+'">Classificar</button>':'<small>Conferido</small>')+'</td></tr>').join('')+
+        (nameHighRisk?'<p class="warning">'+nameHighRisk+' depósito(s) com segundo nome ausente, apelido ou possível divergência. Não classificar automaticamente.</p>':'')+'<div class="table-wrap"><table><thead><tr><th>Data</th><th>Referência</th><th>Valor</th><th>Primeiro/segundo nome</th><th>Situação</th><th>Conferência</th></tr></thead><tbody>'+
+        evidence.map(x=>{const match=nominalAudit?.check(x.memo,participant,state.participants);const sameDay=tx.filter(t=>t.kind==='in'&&t.date===x.date);const probableDup=x.status==='pending'&&sameDay.length&&Math.abs(sum(sameDay)-Number(x.amount))<0.005;return '<tr><td>'+day(x.date)+'</td><td>'+esc(x.memo||'Extrato')+'</td><td>'+brl(x.amount)+'</td><td><strong>'+esc(match?.label||'Não conferido')+'</strong><small class="person-row-sub">'+esc(match?.risk==='high'?'Exige identificação nominal':'Sobrenome completo não comprovado')+'</small></td><td>'+esc(probableDup?'Possível duplicidade — não lançar':x.status==='pending'?'A conferir':x.status==='excluded'?'Fora da caixinha':'Classificado')+'</td><td>'+(x.status==='pending'?'<button type="button" class="action-btn" data-action="classify-bank-evidence" data-id="'+esc(id)+'" data-evidence-id="'+esc(x.id)+'">Classificar</button>':'<small>Conferido</small>')+'</td></tr>';}).join('')+
         '</tbody></table></div>':
         '<p class="person-empty">Ainda não foram vinculados extratos bancários a esta ficha. Os valores classificados aparecem nos sete quadros acima.</p>')+
       '</section>';
