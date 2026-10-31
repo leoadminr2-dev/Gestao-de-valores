@@ -12,7 +12,7 @@
     const candidates=people.filter(p=>{
       const t=norm(p.name).split(' ').filter(Boolean);
       if(parts.length>1)return t.length>1&&t[0].startsWith(parts[0])&&t[1].startsWith(parts[1]);
-      return t.length>0&&(t[0].startsWith(alias)||alias.startsWith(t[0]));
+      return t.length>0&&t[0].startsWith(alias);
     });
     if(parts.length>1){
       if(full.length<2&&full[0].startsWith(parts[0]))return {
@@ -24,7 +24,7 @@
       }
       return {level:'segundo_nome_divergente',label:'Segundo nome divergente',risk:'high',alias};
     }
-    if(full[0].startsWith(alias)||alias.startsWith(full[0])){
+    if(full[0].startsWith(alias)){
       return candidates.length===1
         ?{level:'primeiro_nome_apenas',label:'Só primeiro nome no banco',risk:'medium',alias}
         :{level:'possiveis_homonimos',label:'Primeiro nome ambíguo',risk:'high',alias};
