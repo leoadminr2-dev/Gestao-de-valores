@@ -45,7 +45,7 @@ test('pagamento mensal registrado em due e transaction não soma duas vezes',()=
 });
 test('separa juros, rifas, eventos e empréstimo, sem imputar dívida a terceiro',()=>{
   const {render}=harness(),html=render();
-  for(const name of ['Juros da mensalidade','Rifas','Eventos','Empréstimos','Juros dos empréstimos','Devoluções dos empréstimos'])assert.ok(html.includes(name),name);
+  for(const name of ['Juros da mensalidade','Rifas','Eventos','Empréstimos','Juros do empréstimo','Devolução do empréstimo'])assert.ok(html.includes(name),name);
   assert.match(html,/Devoluções sem contrato/);
   assert.doesNotMatch(html,/R\$ 1,000\.00/);
 });
@@ -79,7 +79,7 @@ test('10 cotas exibem R$500 de mensalidade, adicionais 200/300/400 e rifa R$100'
   assert.match(month('Maio'),/R\$ 800\.00/);
   assert.match(month('Setembro'),/R\$ 400\.00/);
   assert.match(month('Setembro'),/R\$ 900\.00/);
-  assert.match(html,/Referência por rifa/);
+  assert.match(html,/Por sorteio/);
   assert.match(html,/R\$ 100\.00/);
   assert.equal(state.transactions.length,0,'renderização não cria receitas');
   assert.equal(state.dues.length,0,'renderização não cria cobranças');
