@@ -97,7 +97,7 @@ test('status ativo por recorrência é exibido sem marcar pagamentos como mensal
 
 test('ficha destaca sete categorias sem somar créditos do extrato ao caixa',()=>{
   const {state,participant,render}=harness();
-  participant.bankEvidence2026=[{date:'2026-05-18',amount:880,memo:'ALESSAN',status:'pending'}];
+  participant.bankEvidence2026=[{date:'2026-05-18',amount:880,memo:'ALIAS EXEMPLO',status:'pending'}];
   const before=JSON.stringify(state),html=render();
   assert.equal((html.match(/class="value-category-card"/g)||[]).length,7);
   for(const title of ['Mensalidades','Juros da mensalidade','Rifas','Eventos','Empréstimo','Devolução do empréstimo','Juros do empréstimo'])
@@ -133,7 +133,7 @@ test('crédito bancário que soma devolução e juros já lançados gera alerta,
     {id:'p1',participantId:participant.id,date:'2026-10-02',kind:'in',category:'Pagamento de empréstimo',amount:750},
     {id:'j1',participantId:participant.id,date:'2026-10-02',kind:'in',category:'Juros de empréstimo',amount:150}
   ];
-  participant.bankEvidence2026=[{id:'bank',date:'2026-10-02',amount:900,memo:'PIX FRANCIE',status:'pending'}];
+  participant.bankEvidence2026=[{id:'bank',date:'2026-10-02',amount:900,memo:'PIX MODELO',status:'pending'}];
   const before=JSON.stringify(state),html=render();
   assert.match(html,/Possível duplicidade/);
   assert.match(html,/não lançar/);
