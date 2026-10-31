@@ -104,6 +104,76 @@
       // Preservar valor, entrada/saída, origem e vínculos — nunca somar outro pagamento.
     });
   }
+  function classifyBankEvidence(id,evidenceId){
+    const p=state.participants.find(x=>x.id===id);
+    const evidence=p?.bankEvidence2026?.find(x=>x.id===evidenceId);
+    if(!p||!evidence)return notify('Comprovante não localizado.','error');
+    if(evidence.status!=='pending')return notify('Depósito já classificado ou descartado.','error');
+    if(state.transactions.some(t=>t.sourceBankEvidenceId===evidenceId||t.bankReceiptKey===evidence.bankReceiptKey))
+      return notify('Este crédito já tem vínculo no livro-caixa; revisar sem lançar novamente.','error');
+    const posted=state.transactions.filter(t=>t.participantId===id&&t.date===evidence.date&&t.kind==='in');
+    const postedTotal=amount(posted);
+    const detail=postedTotal>0?' Há '+brl(postedTotal)+' em lançamentos já registrados no mesmo dia; confirme para evitar duplicidade.':'';
+    openForm('Classificar depósito de '+brl(evidence.amount)+' — '+p.name,[
+      {key:'decision',label:'Finalidade do depósito',type:'select',options:[{value:'caixinha',label:'Pertence à caixinha — lançar por categoria'},{value:'excluded',label:'Não pertence à caixinha — não lançar'}]},
+      {key:'monthly',label:'Mensalidade (R$)',type:'number',value:0,min:0,step:'0.01'},
+      {key:'monthlyInterest',label:'Juros da mensalidade (R$)',type:'number',value:0,min:0,step:'0.01'},
+      {key:'raffle',label:'Rifas (R$)',type:'number',value:0,min:0,step:'0.01'},
+      {key:'event',label:'Eventos (R$)',type:'number',value:0,min:0,step:'0.01'},
+      {key:'loanReturn',label:'Devolução do empréstimo (R$)',type:'number',value:0,min:0,step:'0.01'},
+      {key:'loanInterest',label:'Juros do empréstimo (R$)',type:'number',value:0,min:0,step:'0.01'},
+      {key:'competence',label:'Mês referente à mensalidade ou juros',type:'select',options:[{value:'',label:'Sem competência confirmada'},...profileMonths()],value:''},
+      {key:'eventName',label:'Nome do evento, se houver',value:''},
+      {key:'notes',label:'Comprovante / observação. '+detail,value:''},
+      {key:'confirm',label:'Confirmar identidade e natureza após conferir extratos',type:'select',options:[{value:'no',label:'Ainda não conferi'},{value:'yes',label:'Conferi o depósito e confirmo a classificação'}]}
+    ],v=>{
+      if(v.confirm!=='yes')throw Error('A confirmação do extrato e do associado é obrigatória.');
+      if(evidence.status!=='pending')throw Error('Depósito já foi analisado.');
+      if(!String(v.notes||'').trim())throw Error('Registre o motivo da classificação e o comprovante.');
+      if(v.decision==='excluded'){
+        evidence.status='excluded';
+        evidence.classificationNotes=v.notes.trim();
+        evidence.classifiedAt=new Date().toISOString();
+        return;
+      }
+      const alloc=[
+        ['monthly','Mensalidade'],
+        ['monthlyInterest','Juros de mensalidade'],
+        ['raffle','Rifa'],
+        ['event','Evento'],
+        ['loanReturn','Pagamento de empréstimo'],
+        ['loanInterest','Juros de empréstimo']
+      ];
+      const values=alloc.map(([key,category])=>({category,cents:Math.round(Number(v[key]||0)*100)}));
+      if(values.some(x=>!Number.isFinite(x.cents)||x.cents<0))throw Error('Valores inválidos. Use valores positivos.');
+      const totalCents=values.reduce((n,x)=>n+x.cents,0),expectedCents=Math.round(Number(evidence.amount)*100);
+      if(totalCents!==expectedCents||totalCents<=0)throw Error('As categorias devem somar exatamente '+brl(evidence.amount)+'.');
+      if(values.some(x=>['Mensalidade','Juros de mensalidade'].includes(x.category)&&x.cents>0)&&!v.competence)
+        throw Error('Confirme a competência da mensalidade.');
+      if(values.some(x=>x.category==='Evento'&&x.cents>0)&&!String(v.eventName||'').trim())
+        throw Error('Informe o nome do evento.');
+      if(postedTotal>0&&posted.some(t=>Math.abs(Number(t.amount)-Number(evidence.amount))<0.005))
+        throw Error('Já há lançamento de igual valor no mesmo dia. Verifique a possível duplicidade.');
+      const postedIds=[];
+      values.filter(x=>x.cents>0).forEach(x=>{
+        const txId=newID('tx');
+        state.transactions.push({
+          id:txId,participantId:id,date:evidence.date,kind:'in',amount:x.cents/100,category:x.category,
+          ...(v.competence&&['Mensalidade','Juros de mensalidade'].includes(x.category)?{competence:v.competence}:{}),
+          ...(x.category==='Evento'?{eventName:String(v.eventName).trim()}:{}),
+          source:'Conciliação de extrato bancário',
+          sourceBankEvidenceId:evidenceId,
+          bankReceiptKey:evidence.bankReceiptKey||null,bankAlias:evidence.memo||'',bankSource:evidence.source||'Extrato',
+          notes:String(v.notes||'').trim()+(x.category==='Pagamento de empréstimo'?' · Aguardar vínculo com contrato.':''),
+          description:x.category+' · '+p.name,createdAt:new Date().toISOString()
+        });
+        postedIds.push(txId);
+      });
+      evidence.status='classified';evidence.classificationTransactions=postedIds;
+      evidence.classificationBreakdown=values.filter(x=>x.cents>0).map(x=>({category:x.category,amount:x.cents/100}));
+      evidence.classificationNotes=v.notes.trim();evidence.classifiedAt=new Date().toISOString();
+    });
+  }
   function newPersonTransaction(id,preset=''){
     const p=state.participants.find(x=>x.id===id);
     if(!p)return notify('Pessoa não localizada.','error');
@@ -348,7 +418,7 @@
   function download(name,content,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const el=document.createElement('a');el.href=url;el.download=name;el.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function backup(){download(`Gestao_Valores_Backup_${today()}.json`,JSON.stringify({...state,exportedAt:new Date().toISOString()},null,2),'application/json');}
   function csv(){const cols=['Data','Movimento','Categoria','Pessoa','Descrição','Valor'];const lines=[cols,...txs().map(x=>[x.date,x.kind==='in'?'Entrada':'Saída',x.category,person(x.participantId),x.description,x.amount])];const txt=lines.map(row=>row.map(v=>`"${String(v??'').replace(/^[=+@-]/, "'").replace(/"/g,'""')}"`).join(';')).join('\r\n');download(`Gestao_Valores_${period}.csv`,'\ufeff'+txt,'text/csv;charset=utf-8');}
-  document.addEventListener('click',e=>{const nav=e.target.closest('[data-view]');if(nav){page=nav.dataset.view;filter='';render();return;}const a=e.target.closest('[data-action]');if(!a)return;const action=a.dataset.action,id=a.dataset.id;({ 'new-person':()=>newPerson(),'edit-person':()=>newPerson(state.participants.find(p=>p.id===id)),'open-person':()=>{selectedPersonId=id;page='person';filter='';render();},'back-participants':()=>{page='participants';filter='';render();},'classify-person-tx':()=>classifyPersonTransaction(id),'new-person-tx':()=>newPersonTransaction(id),'new-person-month':()=>newDue(id),'person-category':()=>newPersonTransaction(id,a.dataset.category),'person-new-loan':()=>newLoan(id),'person-loan-payment':()=>{page='loans';filter=person(id);render();},'new-person-raffle':()=>newPersonTransaction(id,'Rifa'),'new-loan':newLoan,'pay-loan':()=>payLoan(id),'link-return':()=>reconcilePayment(id),'new-due':newDue,'pay-due':()=>payDue(id),'new-tx':newTx,'backup':backup,'export-csv':csv}[action]||(()=>{}))();});
+  document.addEventListener('click',e=>{const nav=e.target.closest('[data-view]');if(nav){page=nav.dataset.view;filter='';render();return;}const a=e.target.closest('[data-action]');if(!a)return;const action=a.dataset.action,id=a.dataset.id;({ 'new-person':()=>newPerson(),'edit-person':()=>newPerson(state.participants.find(p=>p.id===id)),'open-person':()=>{selectedPersonId=id;page='person';filter='';render();},'back-participants':()=>{page='participants';filter='';render();},'classify-person-tx':()=>classifyPersonTransaction(id),'classify-bank-evidence':()=>classifyBankEvidence(id,a.dataset.evidenceId),'new-person-tx':()=>newPersonTransaction(id),'new-person-month':()=>newDue(id),'person-category':()=>newPersonTransaction(id,a.dataset.category),'person-new-loan':()=>newLoan(id),'person-loan-payment':()=>{page='loans';filter=person(id);render();},'new-person-raffle':()=>newPersonTransaction(id,'Rifa'),'new-loan':newLoan,'pay-loan':()=>payLoan(id),'link-return':()=>reconcilePayment(id),'new-due':newDue,'pay-due':()=>payDue(id),'new-tx':newTx,'backup':backup,'export-csv':csv}[action]||(()=>{}))();});
   document.addEventListener('input',e=>{if(e.target.id==='find'){const pos=e.target.selectionStart;filter=e.target.value;render();const el=$('find');el.focus();el.setSelectionRange(pos,pos);}});
   document.addEventListener('change',e=>{if(e.target.id==='year'){period=e.target.value;render();}});
   $('modal').addEventListener('click',e=>{if(e.target.id==='modal')$('modal').hidden=true;});
