@@ -1,5 +1,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
+import {readFileSync} from 'node:fs';
+const homeHtml=readFileSync(new URL('./home.html',import.meta.url),'utf8');
 
 const maxBytes=128*1024;
 export const envConfig=()=>process.env;
@@ -84,6 +86,7 @@ export function createHandler(env,{store,send=sendToMeta}={}){
   const ready=()=>!!(env.META_VERIFY_TOKEN&&env.META_APP_SECRET&&env.META_ACCESS_TOKEN&&env.META_PHONE_NUMBER_ID&&env.DATABASE_URL&&allowed.size);
   return async function handle(request){
     const url=new URL(request.url);
+    if(url.pathname==='/'&&request.method==='GET')return new Response(homeHtml,{status:200,headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','content-security-policy':"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'; frame-ancestors 'none'"}});
     if(url.pathname==='/health'&&request.method==='GET')return json(200,{service:'romeu-whatsapp',version:'0.2.0',status:'ready_for_setup',outbound:env.OUTBOUND_ENABLED==='true',meta_configured:!!(env.META_VERIFY_TOKEN&&env.META_APP_SECRET&&env.META_ACCESS_TOKEN&&env.META_PHONE_NUMBER_ID),database_configured:!!env.DATABASE_URL,allowlist_configured:allowed.size>0});
     if(url.pathname!=='/webhook')return json(404,{error:'not found'});
     if(request.method==='GET')return url.searchParams.get('hub.mode')==='subscribe'&&equal(url.searchParams.get('hub.verify_token'),env.META_VERIFY_TOKEN)&&url.searchParams.has('hub.challenge')
