@@ -94,3 +94,16 @@ test('status ativo por recorrência é exibido sem marcar pagamentos como mensal
   assert.equal(state.dues.length,1);
   assert.equal(state.transactions.length,6);
 });
+
+test('ficha destaca sete categorias sem somar créditos do extrato ao caixa',()=>{
+  const {state,participant,render}=harness();
+  participant.bankEvidence2026=[{date:'2026-05-18',amount:880,memo:'ALESSAN',status:'pending'}];
+  const before=JSON.stringify(state),html=render();
+  assert.equal((html.match(/class="value-category-card"/g)||[]).length,7);
+  for(const title of ['Mensalidades','Juros da mensalidade','Rifas','Eventos','Empréstimo','Devolução do empréstimo','Juros do empréstimo'])
+    assert.ok(html.includes(title),title);
+  assert.match(html,/Extratos bancários/);
+  assert.match(html,/ALESSAN/);
+  assert.match(html,/Valores previstos não são pagamentos/);
+  assert.equal(JSON.stringify(state),before);
+});
