@@ -109,7 +109,7 @@
     const evidence=p?.bankEvidence2026?.find(x=>x.id===evidenceId);
     if(!p||!evidence)return notify('Comprovante não localizado.','error');
     if(evidence.status!=='pending')return notify('Depósito já classificado ou descartado.','error');
-    if(state.transactions.some(t=>t.sourceBankEvidenceId===evidenceId||t.bankReceiptKey===evidence.bankReceiptKey))
+    if(state.transactions.some(t=>t.sourceBankEvidenceId===evidenceId||(evidence.bankReceiptKey&&t.bankReceiptKey===evidence.bankReceiptKey)))
       return notify('Este crédito já tem vínculo no livro-caixa; revisar sem lançar novamente.','error');
     const posted=state.transactions.filter(t=>t.participantId===id&&t.date===evidence.date&&t.kind==='in');
     const postedTotal=amount(posted);
