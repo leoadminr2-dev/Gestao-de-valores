@@ -7,7 +7,7 @@
     const alias=aliasFromMemo(memo);
     const full=norm(person?.name||'').split(' ').filter(Boolean),parts=alias.split(' ').filter(Boolean);
     if(!alias||!full.length)return {level:'sem_dados',label:'Dados insuficientes',risk:'high',alias};
-    if(full[0]==='ZU'&&alias==='ZULEIDE')return {
+    if(parts.length===1&&full[0].length<=3&&alias.length>full[0].length&&alias.startsWith(full[0]))return {
       level:'apelido_sem_confirmacao',label:'Apelido: confirmar nome civil',risk:'high',alias};
     const candidates=people.filter(p=>{
       const t=norm(p.name).split(' ').filter(Boolean);
