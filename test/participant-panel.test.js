@@ -103,7 +103,7 @@ test('ficha destaca sete categorias sem somar créditos do extrato ao caixa',()=
   for(const title of ['Mensalidades','Juros da mensalidade','Rifas','Eventos','Empréstimo','Devolução do empréstimo','Juros do empréstimo'])
     assert.ok(html.includes(title),title);
   assert.match(html,/Extratos bancários/);
-  assert.match(html,/ALESSAN/);
+  assert.match(html,/ALIAS EXEMPLO/);
   assert.match(html,/Valores previstos não são pagamentos/);
   assert.equal(JSON.stringify(state),before);
 });
