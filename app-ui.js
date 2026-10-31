@@ -226,12 +226,12 @@
   }
   const participantOptions=()=>state.participants.slice().sort((a,b)=>a.name.localeCompare(b.name,'pt')).map(p=>({value:p.id,label:p.name}));
   function newPerson(old){openForm(old?'Editar participante':'Novo participante',[{key:'name',label:'Nome completo',value:old?.name||'',required:true},{key:'phone',label:'Telefone',value:old?.phone||''},{key:'quotas',label:'Quantidade de cotas',type:'number',min:1,value:old?.quotas||1,required:true},{key:'active',label:'Situação',type:'select',value:old?.active===false?'no':'yes',options:[{value:'yes',label:'Ativo'},{value:'no',label:'Inativo'}]}],v=>{if(!v.name.trim())throw Error('Informe o nome.');if(!(Number(v.quotas)>0&&Number(v.quotas)<=10))throw Error('Cotas entre 1 e 10.');const p=old||{id:newID('person'),createdAt:new Date().toISOString()};Object.assign(p,{name:v.name.trim(),phone:v.phone.trim(),quotas:Number(v.quotas),active:v.active==='yes'});if(!old)state.participants.push(p);});}
-  function newLoan(){
+  function newLoan(preferredId){
     if(!state.participants.length)return notify('Cadastre um associado primeiro.','error');
     const rules=window.CaixinhaRules;
     if(!rules)return notify('Regulamento indisponível. Atualize a página.','error');
     openForm('Empréstimo para associado · regras 2026',[
-      {key:'participantId',label:'Associado (ativo)',type:'select',options:participantOptions()},
+      {key:'participantId',label:'Associado (ativo)',type:'select',options:participantOptions(),value:preferredId||''},
       {key:'principal',label:'Valor emprestado (R$)',type:'number',step:'0.01',min:0.01,required:true},
       {key:'date',label:'Data da concessão',type:'date',value:today(),required:true},
       {key:'dueDate',label:'Vencimento final (até 30/11)',type:'date',value:'2026-11-30',required:true},
@@ -254,13 +254,13 @@
     });
   }
   function payLoan(id){const l=state.loans.find(x=>x.id===id);if(!l)return;const left=Math.max(0,loanTotal(l)-Number(l.paidTotal||0));openForm('Registrar devolução',[{key:'amount',label:`Valor recebido (máximo ${brl(left)})`,type:'number',min:0.01,step:'0.01',required:true},{key:'date',label:'Data da devolução',type:'date',value:today(),required:true},{key:'notes',label:'Observações'}],v=>{const a=Number(v.amount);if(!(a>0&&a<=left+0.005))throw Error('Valor maior que o saldo ou inválido.');l.paidTotal=Number(l.paidTotal||0)+a;l.status=l.paidTotal>=loanTotal(l)-0.005?'paid':'partial';state.transactions.push({id:newID('tx'),date:v.date,kind:'in',amount:a,category:'Devolução de empréstimo',participantId:l.participantId,loanId:l.id,description:`Devolução · ${person(l.participantId)}`,notes:v.notes,source:'Aplicativo',createdAt:new Date().toISOString()});});}
-  function newDue(){
+  function newDue(preferredId){
     if(!state.participants.length)return notify('Cadastre uma pessoa primeiro.','error');
     const base=Number(state.config?.monthlyBasePerQuota??50);
     const extra=state.config?.monthlyAdditionalPerQuota2026||[20,20,20,20,30,30,30,30,40,40,40];
     const options=Array.from({length:11},(_,i)=>({value:'2026-'+String(i+1).padStart(2,'0'),label:new Date(2026,i,15).toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}));
     openForm('Lançar mensalidade · tabela 2026',[
-      {key:'participantId',label:'Associado',type:'select',options:participantOptions()},
+      {key:'participantId',label:'Associado',type:'select',options:participantOptions(),value:preferredId||''},
       {key:'month',label:'Competência (janeiro a novembro)',type:'select',value:today().slice(0,7),options},
       {key:'notes',label:'Observação (opcional)',value:''}
     ],v=>{
@@ -322,7 +322,7 @@
   function download(name,content,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const el=document.createElement('a');el.href=url;el.download=name;el.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function backup(){download(`Gestao_Valores_Backup_${today()}.json`,JSON.stringify({...state,exportedAt:new Date().toISOString()},null,2),'application/json');}
   function csv(){const cols=['Data','Movimento','Categoria','Pessoa','Descrição','Valor'];const lines=[cols,...txs().map(x=>[x.date,x.kind==='in'?'Entrada':'Saída',x.category,person(x.participantId),x.description,x.amount])];const txt=lines.map(row=>row.map(v=>`"${String(v??'').replace(/^[=+@-]/, "'").replace(/"/g,'""')}"`).join(';')).join('\r\n');download(`Gestao_Valores_${period}.csv`,'\ufeff'+txt,'text/csv;charset=utf-8');}
-  document.addEventListener('click',e=>{const nav=e.target.closest('[data-view]');if(nav){page=nav.dataset.view;filter='';render();return;}const a=e.target.closest('[data-action]');if(!a)return;const action=a.dataset.action,id=a.dataset.id;({ 'new-person':()=>newPerson(),'edit-person':()=>newPerson(state.participants.find(p=>p.id===id)),'open-person':()=>{selectedPersonId=id;page='person';filter='';render();},'back-participants':()=>{page='participants';filter='';render();},'classify-person-tx':()=>classifyPersonTransaction(id),'new-person-tx':()=>newPersonTransaction(id),'new-person-raffle':()=>newPersonTransaction(id,'Rifa'),'new-loan':newLoan,'pay-loan':()=>payLoan(id),'link-return':()=>reconcilePayment(id),'new-due':newDue,'pay-due':()=>payDue(id),'new-tx':newTx,'backup':backup,'export-csv':csv}[action]||(()=>{}))();});
+  document.addEventListener('click',e=>{const nav=e.target.closest('[data-view]');if(nav){page=nav.dataset.view;filter='';render();return;}const a=e.target.closest('[data-action]');if(!a)return;const action=a.dataset.action,id=a.dataset.id;({ 'new-person':()=>newPerson(),'edit-person':()=>newPerson(state.participants.find(p=>p.id===id)),'open-person':()=>{selectedPersonId=id;page='person';filter='';render();},'back-participants':()=>{page='participants';filter='';render();},'classify-person-tx':()=>classifyPersonTransaction(id),'new-person-tx':()=>newPersonTransaction(id),'new-person-month':()=>newDue(id),'person-category':()=>newPersonTransaction(id,a.dataset.category),'person-new-loan':()=>newLoan(id),'person-loan-payment':()=>payLoanForParticipant(id),'new-person-raffle':()=>newPersonTransaction(id,'Rifa'),'new-loan':newLoan,'pay-loan':()=>payLoan(id),'link-return':()=>reconcilePayment(id),'new-due':newDue,'pay-due':()=>payDue(id),'new-tx':newTx,'backup':backup,'export-csv':csv}[action]||(()=>{}))();});
   document.addEventListener('input',e=>{if(e.target.id==='find'){const pos=e.target.selectionStart;filter=e.target.value;render();const el=$('find');el.focus();el.setSelectionRange(pos,pos);}});
   document.addEventListener('change',e=>{if(e.target.id==='year'){period=e.target.value;render();}});
   $('modal').addEventListener('click',e=>{if(e.target.id==='modal')$('modal').hidden=true;});
