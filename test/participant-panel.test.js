@@ -126,3 +126,16 @@ test('linha da planilha mantém evidência bancaria separada e vazio não equiva
   assert.match(html,/não cobrança automática/);
   assert.equal(JSON.stringify(state),before);
 });
+
+test('crédito bancário que soma devolução e juros já lançados gera alerta, sem duplicar',()=>{
+  const {state,participant,render}=harness();
+  state.transactions=[
+    {id:'p1',participantId:participant.id,date:'2026-10-02',kind:'in',category:'Pagamento de empréstimo',amount:750},
+    {id:'j1',participantId:participant.id,date:'2026-10-02',kind:'in',category:'Juros de empréstimo',amount:150}
+  ];
+  participant.bankEvidence2026=[{id:'bank',date:'2026-10-02',amount:900,memo:'PIX FRANCIE',status:'pending'}];
+  const before=JSON.stringify(state),html=render();
+  assert.match(html,/Possível duplicidade/);
+  assert.match(html,/não lançar/);
+  assert.equal(JSON.stringify(state),before);
+});
