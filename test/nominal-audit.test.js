@@ -21,3 +21,7 @@ test('sobrenome omitido, apelido e primeiro nome abreviado pedem verificacao',()
   assert.equal(match('PIX ALEXAND','Alexandra').level,'primeiro_nome_apenas');
   assert.notEqual(audit.aliasFromMemo('PIX TRANSF ALESSAN02/03'),audit.aliasFromMemo('PIX TRANSF ALEXAND02/03'));
 });
+
+test('JULIANA nao deve ser atribuida automaticamente a JULIAN',()=>{
+ assert.equal(audit.check('PIX JULIANA',{name:'Julian'},[{name:'Julian'}]).level,'nome_divergente');
+});
