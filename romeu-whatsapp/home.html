@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#06152b">
+<meta name="description" content="ROMEU — organize tarefas, compras, anotações e despesas de um jeito simples.">
+<title>ROMEU — Minha Vida em Dia</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:16px}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;color:#e9f3ff;background:radial-gradient(circle at 65% -10%,#16477b 0%,transparent 35%),linear-gradient(155deg,#06152b,#071c35 60%,#05101f)}
+button,input{font:inherit}button{cursor:pointer}a{color:#a8e5ff}
+main{max-width:920px;margin:0 auto;padding:28px 16px 60px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:48px}
+.logo{display:flex;align-items:center;gap:13px;font-size:26px;font-weight:850;letter-spacing:.05em}
+.mark{width:47px;height:47px;display:grid;place-items:center;background:linear-gradient(135deg,#17c5ff,#3666f7);border-radius:16px;box-shadow:0 8px 30px #068af34f;font-size:25px}
+.badge{display:inline-block;border:1px solid #347297;border-radius:99px;padding:7px 12px;color:#b8ddf6;font-size:12px;font-weight:600}
+h1{font-size:clamp(31px,6vw,54px);letter-spacing:-.045em;line-height:1.08;margin:0 0 14px}
+h1 em{font-style:normal;color:#68d6ff}
+.lead{color:#aac1d6;font-size:17px;line-height:1.65;margin:0 0 27px;max-width:700px}
+.features{display:flex;gap:9px;flex-wrap:wrap;margin:0 0 28px}
+.features span{padding:8px 12px;background:#142d4b;border:1px solid #2c5071;border-radius:12px;color:#d3eaff;font-size:13px}
+.app{border:1px solid #2f5575;border-radius:22px;background:#091b31;overflow:hidden;box-shadow:0 20px 80px #0005}
+.app-head{padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#102845;border-bottom:1px solid #274c6c}
+.app-head strong{font-size:18px}.app-head small{display:block;color:#b0cadd;margin-top:3px}
+.chat{min-height:245px;max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding:22px}
+.message{max-width:min(90%,670px);padding:13px 16px;border-radius:16px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
+.bot{background:#15375a;align-self:flex-start;border-bottom-left-radius:4px}
+.you{background:#096eb4;align-self:flex-end;border-bottom-right-radius:4px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;padding:4px 20px 15px}
+.chips button{background:#122d49;border:1px solid #345b7f;border-radius:99px;padding:8px 12px;color:#ccefff;font-size:13px}
+.chips button:hover,.chips button:focus-visible{border-color:#4ad0ff}
+form{display:flex;padding:14px 16px;gap:9px;background:#0d233c;border-top:1px solid #274c6c}
+input{flex:1;min-width:0;background:#06152b;color:#fff;border:1px solid #3a5a78;border-radius:12px;padding:13px 14px;outline-offset:3px}
+input:focus{border-color:#4ad0ff}
+.send{border:0;border-radius:12px;background:#33b8ff;color:#06172d;font-weight:800;padding:0 22px}
+.send:hover{background:#75d2ff}
+.privacy{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;color:#b8c9d8;font-size:12px;padding:15px 19px;line-height:1.5;border-top:1px solid #193751}
+.clear{background:none;border:1px solid #3f6784;color:#dcefff;padding:7px 10px;border-radius:8px}
+.notice{padding:17px 20px;border:1px solid #284664;border-radius:14px;color:#a9c2d9;font-size:13px;line-height:1.7;margin-top:22px}
+footer{text-align:center;padding:30px 0 0;color:#7398b7;font-size:12px}
+@media(max-width:480px){header{margin-bottom:34px}.send{padding:0 15px}.chat{padding:15px}.message{max-width:95%}}
+</style>
+</head>
+<body>
+<main>
+<header><div class="logo"><div class="mark" aria-hidden="true">🤖</div><div>ROMEU</div></div><span class="badge">Minha Vida em Dia • Versão Web inicial</span></header>
+<section aria-labelledby="headline">
+<h1 id="headline">Sua rotina mais leve.<br><em>Seu dia em ordem.</em></h1>
+<p class="lead">Converse com o ROMEU para registrar tarefas, compras, ideias, gastos e recebimentos. Simples, rápido e sem instalação.</p>
+<div class="features"><span>✓ Tarefas</span><span>✓ Lista de compras</span><span>✓ Finanças</span><span>✓ Anotações</span></div>
+</section>
+<section class="app" aria-label="Assistente ROMEU">
+<div class="app-head"><div><strong>🤖 Converse com o ROMEU</strong><small>Comandos de organização • Funciona neste navegador</small></div><span class="badge">Modo Web local</span></div>
+<div class="chat" id="chat" aria-live="polite" aria-relevant="additions text"></div>
+<div class="chips" aria-label="Sugestões de comandos"><button type="button" data-command="ajuda">Ver comandos</button><button type="button" data-command="tarefa pagar a conta de luz">Criar tarefa</button><button type="button" data-command="comprar arroz">Adicionar compra</button><button type="button" data-command="resumo">Meu resumo</button></div>
+<form id="form"><input id="entry" type="text" name="entry" maxlength="500" autocomplete="off" placeholder="Ex.: tarefa levar o carro" aria-label="Mensagem ao ROMEU" required><button class="send" type="submit">Enviar</button></form>
+<div class="privacy"><span>🔒 Registros guardados somente neste navegador. Sem sincronização entre aparelhos.</span><button class="clear" id="clear" type="button">Apagar meus registros</button></div>
+</section>
+<p class="notice"><strong>Sobre esta versão:</strong> este é um assistente por comandos, não um chat de inteligência artificial generativa. O acesso pelo WhatsApp está em configuração e não está liberado para conversas nesta página. Dados inseridos aqui ficam apenas no dispositivo e podem ser apagados a qualquer momento.</p>
+<footer>ROMEU — Tecnologia para facilitar sua rotina.</footer>
+</main>
+<script>
+(function(){
+"use strict";
+const key="romeu-web-local-v1";
+const chat=document.getElementById("chat");
+const input=document.getElementById("entry");
+let entries=[];
+try{const saved=JSON.parse(localStorage.getItem(key)||"[]");if(Array.isArray(saved))entries=saved.filter(x=>x&&typeof x==="object").slice(-300)}catch(e){}
+function add(text,who){const el=document.createElement("div");el.className="message "+(who==="you"?"you":"bot");el.textContent=text;chat.appendChild(el);chat.scrollTop=chat.scrollHeight}
+function persist(){try{localStorage.setItem(key,JSON.stringify(entries.slice(-300)));return true}catch(e){return false}}
+function norm(s){return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim()}
+function money(n){return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(n)}
+function command(raw){
+const s=norm(raw);
+if(/^(oi|ola|ajuda|menu|iniciar|start)$/.test(s))return "Posso ajudar você a organizar o dia!\n\nExperimente:\n• tarefa pagar a conta de luz\n• comprar arroz\n• anotar reunião às 10h\n• ideia novo projeto\n• estudar português\n• gastei 30 com almoço\n• recebi 100 de cliente\n• tarefas\n• compras\n• resumo";
+if(/^(tarefas|minhas tarefas)$/.test(s)){const a=entries.filter(x=>x.kind==="task");return a.length?"📋 Suas tarefas:\n"+a.slice(-12).map(x=>"• "+x.content).join("\n"):"Você ainda não registrou tarefas."}
+if(/^(compras|lista de compras)$/.test(s)){const a=entries.filter(x=>x.kind==="shopping");return a.length?"🛒 Sua lista de compras:\n"+a.slice(-12).map(x=>"• "+x.content).join("\n"):"Sua lista de compras está vazia."}
+if(/^(resumo|saldo|status)$/.test(s)){
+const expenses=entries.filter(x=>x.kind==="expense").reduce((a,x)=>a+x.amount,0);
+const income=entries.filter(x=>x.kind==="income").reduce((a,x)=>a+x.amount,0);
+return "📊 Resumo neste aparelho:\nTarefas: "+entries.filter(x=>x.kind==="task").length+"\nCompras: "+entries.filter(x=>x.kind==="shopping").length+"\nNotas e ideias: "+entries.filter(x=>["note","idea","study"].includes(x.kind)).length+"\nDespesas: "+money(expenses)+"\nRecebimentos: "+money(income);
+}
+let type,content,amount;
+const financial=raw.trim().match(/^(gastei|paguei|despesa|recebi|ganhei|entrada)\s+(?:r\$\s*)?([\d.,]+)(?:\s+(?:com|de|em|por|no|na)\s+(.+))?$/i);
+if(financial){
+const numberText=financial[2].includes(",")?financial[2].replace(/\./g,"").replace(",","."):/^\d{1,3}(?:\.\d{3})+$/.test(financial[2])?financial[2].replace(/\./g,""):financial[2];
+amount=Number(numberText);if(!Number.isFinite(amount)||amount<=0||amount>1000000000)return "Informe um valor positivo válido.";
+type=/^(recebi|ganhei|entrada)$/i.test(financial[1])?"income":"expense";content=(financial[3]||"Sem descrição").trim();
+}else{
+const m=raw.trim().match(/^(tarefa|lembrar|fazer|comprar|anotar|anota|nota|ideia|estudar)\s+(.+)$/i);
+if(!m)return "Ainda não entendi esse pedido. Digite ajuda para consultar os comandos.";
+const kinds={tarefa:"task",lembrar:"task",fazer:"task",comprar:"shopping",anotar:"note",anota:"note",nota:"note",ideia:"idea",estudar:"study"};
+type=kinds[m[1].toLowerCase()];content=m[2].trim();
+}
+if(!content)return "Escreva o que você gostaria de registrar.";
+entries.push({kind:type,content:content.slice(0,450),amount:amount||0,when:new Date().toISOString()});
+if(!persist())return "Seu navegador impediu salvar. Libere armazenamento local ou tente outro navegador.";
+const names={task:"Tarefa",shopping:"Compra",note:"Anotação",idea:"Ideia",study:"Estudo",expense:"Despesa",income:"Recebimento"};
+return "✅ "+names[type]+" registrada"+(amount?" — "+money(amount):"")+": "+content+"\nSalvo apenas neste navegador.";
+}
+function submit(value){const text=(value||"").trim().slice(0,500);if(!text)return;add(text,"you");add(command(text),"bot");input.value="";input.focus()}
+document.getElementById("form").addEventListener("submit",function(e){e.preventDefault();submit(input.value)});
+document.querySelectorAll("[data-command]").forEach(b=>b.addEventListener("click",()=>submit(b.getAttribute("data-command"))));
+document.getElementById("clear").addEventListener("click",function(){if(!confirm("Apagar todos os registros do ROMEU guardados neste navegador?"))return;entries=[];try{localStorage.removeItem(key)}catch(e){}chat.textContent="";add("Seus registros locais foram apagados. Digite ajuda para começar de novo.","bot")});
+add("Olá! Eu sou o ROMEU. 🤖\nPosso organizar suas tarefas, compras, anotações e finanças. Digite ajuda para ver exemplos. Os dados são guardados só neste navegador.","bot");
+})();
+</script>
+</body>
+</html>
