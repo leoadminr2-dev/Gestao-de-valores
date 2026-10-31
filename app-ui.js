@@ -118,7 +118,7 @@
       {key:'decision',label:'Finalidade do depósito',type:'select',options:[{value:'caixinha',label:'Pertence à caixinha — lançar por categoria'},{value:'excluded',label:'Não pertence à caixinha — não lançar'}]},
       {key:'payerFullName',label:'Nome e sobrenome COMPLETOS do remetente no comprovante (não use apenas o nome abreviado do extrato)',value:''},
       {key:'payerRelation',label:'Relação do remetente com o associado',type:'select',options:[
-        {value:'',label:'Não confirmada'},{value:'associado',label:'É o próprio associado (identidade confirmada)'},{value:'terceiro',label:'É terceiro; vínculo explicado na observação'}
+        {value:'',label:'Não confirmada'},{value:'associado',label:'Mesmo primeiro e segundo nome do associado'},{value:'apelido',label:'Nome civil diferente do cadastro/apelido (explicar)'},{value:'terceiro',label:'Outra pessoa depositou para o associado (explicar)'}
       ]},
       {key:'monthly',label:'Mensalidade (R$)',type:'number',value:0,min:0,step:'0.01'},
       {key:'monthlyInterest',label:'Juros da mensalidade (R$)',type:'number',value:0,min:0,step:'0.01'},
@@ -142,8 +142,14 @@
       }
       const payerFullName=String(v.payerFullName||'').trim().replace(/\s+/g,' ');
       if(payerFullName.split(' ').length<2)throw Error('Confira e informe primeiro e segundo nome do remetente no comprovante completo.');
-      if(!['associado','terceiro'].includes(v.payerRelation))throw Error('Confirme se o remetente é o associado ou um terceiro.');
-      if(v.payerRelation==='terceiro'&&String(v.notes||'').trim().length<12)throw Error('Explique o vínculo do terceiro com o associado e indique o comprovante.');
+      if(!['associado','terceiro','apelido'].includes(v.payerRelation))throw Error('Confirme a relação entre o remetente e o associado.');
+      if(v.payerRelation==='associado'){
+        const normalizeName=window.GestaoNominalAudit?.normalize||((str)=>String(str||'').trim().toUpperCase());
+        const registered=normalizeName(p.name).split(' '),verified=normalizeName(payerFullName).split(' ');
+        if(registered.length<2||verified[0]!==registered[0]||verified[1]!==registered[1])
+          throw Error('Primeiro e segundo nome diferem do cadastro. Corrija o nome ou escolha a exceção explicada no comprovante.');
+      }
+      if(['terceiro','apelido'].includes(v.payerRelation)&&String(v.notes||'').trim().length<12)throw Error('Explique o vínculo, o apelido ou a divergência e indique o comprovante.');
       const bankAliasCheck=window.GestaoNominalAudit?.check(evidence.memo,{name:payerFullName},[{name:payerFullName}]);
       if(bankAliasCheck&&['nome_divergente','segundo_nome_divergente'].includes(bankAliasCheck.level))
         throw Error('O nome informado não corresponde ao nome abreviado do banco. Revise a identidade antes de lançar.');
