@@ -169,8 +169,8 @@
         throw Error('Confirme a competência da mensalidade.');
       if(values.some(x=>x.category==='Evento'&&x.cents>0)&&!String(v.eventName||'').trim())
         throw Error('Informe o nome do evento.');
-      if(postedTotal>0&&posted.some(t=>Math.abs(Number(t.amount)-Number(evidence.amount))<0.005))
-        throw Error('Já há lançamento de igual valor no mesmo dia. Verifique a possível duplicidade.');
+      if(postedTotal>0&&(posted.some(t=>Math.abs(Number(t.amount)-Number(evidence.amount))<0.005)||Math.abs(postedTotal-Number(evidence.amount))<0.005))
+        throw Error('Já existem valores no mesmo dia cuja soma pode corresponder ao depósito. Confirme e vincule o comprovante sem lançar outra entrada.');
       const postedIds=[];
       values.filter(x=>x.cents>0).forEach(x=>{
         const txId=newID('tx');
