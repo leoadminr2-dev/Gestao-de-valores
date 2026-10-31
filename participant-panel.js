@@ -175,8 +175,8 @@
     const proof='<section class="panel"><h3>Extratos bancários — a classificar</h3>'+
       '<p class="note">Os comprovantes devem ser conferidos antes de separar mensalidade, juros, rifa, evento ou empréstimo. Valores pendentes não são somados ao livro-caixa.</p>'+
       (evidence.length?'<p><strong>'+brl(pendingAmount)+'</strong> · '+pending.length+' depósito(s) pendentes de classificação</p>'+
-        '<div class="table-wrap"><table><thead><tr><th>Data</th><th>Referência</th><th>Valor</th><th>Situação</th></tr></thead><tbody>'+
-        evidence.map(x=>'<tr><td>'+day(x.date)+'</td><td>'+esc(x.memo||'Extrato')+'</td><td>'+brl(x.amount)+'</td><td>'+esc(x.status==='pending'?'A conferir':'Classificado')+'</td></tr>').join('')+
+        '<div class="table-wrap"><table><thead><tr><th>Data</th><th>Referência</th><th>Valor</th><th>Situação</th><th>Conferência</th></tr></thead><tbody>'+
+        evidence.map(x=>'<tr><td>'+day(x.date)+'</td><td>'+esc(x.memo||'Extrato')+'</td><td>'+brl(x.amount)+'</td><td>'+esc(x.status==='pending'?'A conferir':x.status==='excluded'?'Fora da caixinha':'Classificado')+'</td><td>'+(x.status==='pending'?'<button type="button" class="action-btn" data-action="classify-bank-evidence" data-id="'+esc(id)+'" data-evidence-id="'+esc(x.id)+'">Classificar</button>':'<small>Conferido</small>')+'</td></tr>').join('')+
         '</tbody></table></div>':
         '<p class="person-empty">Ainda não foram vinculados extratos bancários a esta ficha. Os valores classificados aparecem nos sete quadros acima.</p>')+
       '</section>';
