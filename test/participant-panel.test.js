@@ -107,3 +107,22 @@ test('ficha destaca sete categorias sem somar créditos do extrato ao caixa',()=
   assert.match(html,/Valores previstos não são pagamentos/);
   assert.equal(JSON.stringify(state),before);
 });
+
+test('formato planilha organiza onze meses e seções de cada movimento',()=>{
+  const {render}=harness();
+  const html=render();
+  assert.equal((html.match(/class="panel sheet-section"/g)||[]).length,7);
+  for(const name of ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro'])assert.ok(html.includes('<strong>'+name+'</strong>'),name);
+  for(const label of ['1. MENSALIDADES','2. JUROS DA MENSALIDADE','3. RIFAS','4. EVENTOS','5. EMPRÉSTIMO','6. DEVOLUÇÃO DO EMPRÉSTIMO','7. JUROS DO EMPRÉSTIMO'])assert.ok(html.includes(label),label);
+  assert.ok(html.indexOf('1. MENSALIDADES')<html.indexOf('7. JUROS DO EMPRÉSTIMO'));
+});
+test('linha da planilha mantém evidência bancaria separada e vazio não equivale a dívida',()=>{
+  const {state,participant,render}=harness();
+  participant.bankEvidence2026=[{id:'bank1',date:'2026-02-19',memo:'Pix do extrato',amount:770,status:'pending'}];
+  const before=JSON.stringify(state),html=render();
+  assert.match(html,/Pix do extrato/);
+  assert.match(html,/Sem conferência/);
+  assert.match(html,/Valores de extrato ainda não conciliados/);
+  assert.match(html,/não cobrança automática/);
+  assert.equal(JSON.stringify(state),before);
+});
