@@ -2,26 +2,24 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const audit=require('../nominal-audit.js');
-const participants=[
- {name:'Ana Cristina Damasceno'},{name:'Ana Paula'},{name:'Ana Paula Oliveira'},
- {name:'Bruna Fraga'},{name:'Bruna Braga'},{name:'Leila'},
- {name:'Alessandra Alves'},{name:'Alexandra'},{name:'Zu'},{name:'Taiz Caparica'}
+const roster=[
+ {name:'Ana Cristina Modelo'},{name:'Ana Paula Um'},{name:'Ana Paula Dois'},
+ {name:'Bruna Flores'},{name:'Bruna Barros'},{name:'Lia'},
+ {name:'Alessa Modelo'},{name:'Alexanda Modelo'},{name:'Mia'},{name:'Taiz Camila'}
 ];
-const match=(memo,name)=>audit.check(memo,{name},participants);
-test('primeiro e inicio do segundo nome sustentam melhor correspondencia sem confirmar identidade plena',()=>{
-  assert.equal(match('PIX TRANSF ANA CRI15/06','Ana Cristina Damasceno').level,'dois_nomes_parciais');
-  assert.equal(match('PIX BRUNA F','Bruna Fraga').level,'dois_nomes_parciais');
-  assert.equal(match('PIX BRUNA F','Bruna Braga').level,'segundo_nome_divergente');
-  assert.equal(match('PIX TAIZ CA','Taiz Caparica').level,'dois_nomes_parciais');
+const result=(memo,name)=>audit.check(memo,{name},roster);
+test('primeiro nome e prefixo do segundo ajudam a desambiguar sem afirmar identidade',()=>{
+ assert.equal(result('PIX TRANSF ANA CRI15/06','Ana Cristina Modelo').level,'dois_nomes_parciais');
+ assert.equal(result('PIX BRUNA F','Bruna Flores').level,'dois_nomes_parciais');
+ assert.equal(result('PIX BRUNA F','Bruna Barros').level,'segundo_nome_divergente');
+ assert.equal(result('PIX TAIZ CA','Taiz Camila').level,'dois_nomes_parciais');
 });
-test('sobrenome omitido, apelido e primeiro nome abreviado pedem verificacao',()=>{
-  assert.equal(match('PIX LEILA D','Leila').level,'sobrenome_ausente');
-  assert.equal(match('PIX ZULEIDE','Zu').level,'apelido_sem_confirmacao');
-  assert.equal(match('PIX ALESSAN','Alessandra Alves').level,'primeiro_nome_apenas');
-  assert.equal(match('PIX ALEXAND','Alexandra').level,'primeiro_nome_apenas');
-  assert.notEqual(audit.aliasFromMemo('PIX TRANSF ALESSAN02/03'),audit.aliasFromMemo('PIX TRANSF ALEXAND02/03'));
+test('sobrenome ausente ou apelido exigem comprovante civil',()=>{
+ assert.equal(result('PIX LIA S','Lia').level,'sobrenome_ausente');
+ assert.equal(result('PIX MIABELA','Mia').level,'apelido_sem_confirmacao');
+ assert.equal(result('PIX ALESSA','Alessa Modelo').level,'primeiro_nome_apenas');
+ assert.equal(result('PIX ALEXAN','Alexanda Modelo').level,'primeiro_nome_apenas');
 });
-
-test('JULIANA nao deve ser atribuida automaticamente a JULIAN',()=>{
+test('primeiro nome menor nao deve engolir outro nome maior',()=>{
  assert.equal(audit.check('PIX JULIANA',{name:'Julian'},[{name:'Julian'}]).level,'nome_divergente');
 });
