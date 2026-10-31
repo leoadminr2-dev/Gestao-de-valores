@@ -76,6 +76,37 @@
        (interestOpen>0?'<div class="month-fig"><small>Juros de atraso 10% — conferir cobrança</small><strong>'+brl(interestOpen)+'</strong></div>':'')+
        '<div class="month-foot">'+esc(flags)+'</div></article>';
     }).join('');
+
+    // Cada categoria tem saldo próprio. Previsões e registros bancários não classificados nunca viram receita.
+    const groupAmount=(category,kind)=>sum(yearTx.filter(t=>section(t.category)===category&&t.kind===kind));
+    const monthlyPaid=MONTHS.reduce((n,_,i)=>{
+      const m=year+'-'+String(i+1).padStart(2,'0');
+      const confirmed=tx.filter(t=>t.kind==='in'&&t.category==='Mensalidade'&&competence(t,dues)===m);
+      const declared=dues.filter(d=>d.month===m);
+      return n+Math.max(sum(confirmed),declared.reduce((a,d)=>a+Number(d.paidAmount||0),0));
+    },0);
+    const monthlyExpected=MONTHS.reduce((n,_,i)=>{
+      const m=year+'-'+String(i+1).padStart(2,'0');
+      const recorded=dues.filter(d=>d.month===m);
+      return n+(recorded.length?recorded.reduce((a,d)=>a+Number(d.amount||0),0):fees[i]?Number(fees[i])*quotas:0);
+    },0);
+    const categories=[
+      ['Mensalidades',monthlyPaid,'Previsto: '+brl(monthlyExpected),'Mensalidade','new-person-month'],
+      ['Juros da mensalidade',groupAmount('Juros de mensalidade','in'),'Juros efetivamente recebidos','Juros de mensalidade','person-category'],
+      ['Rifas',groupAmount('Rifa','in'),'Por sorteio: '+brl(rafflePerQuota*quotas),'Rifa','person-category'],
+      ['Eventos',groupAmount('Evento','in'),'Somente valores de eventos lançados','Evento','person-category'],
+      ['Empréstimo',personLoans.reduce((a,l)=>a+Number(l.principal||0),0),'Principal concedido','Empréstimo concedido','person-new-loan'],
+      ['Devolução do empréstimo',groupAmount('Pagamento de empréstimo','in'),'Principal recebido e classificado','Pagamento de empréstimo','person-loan-payment'],
+      ['Juros do empréstimo',groupAmount('Juros de empréstimo','in'),'Juros recebidos separadamente','Juros de empréstimo','person-loan-payment']
+    ];
+    const categoryCards='<section class="panel"><h3>Valores por categoria</h3>'+
+      '<p class="note">Valores previstos não são pagamentos. Zero significa ausência de lançamento classificado, não prova de inadimplência.</p>'+
+      '<div class="value-category-grid">'+categories.map(c=>
+        '<article class="value-category-card"><div class="value-category-name">'+esc(c[0])+'</div>'+
+        '<div class="value-category-amount">'+brl(c[1])+'</div><p>'+esc(c[2])+'</p>'+
+        '<small>'+(c[1]?'Valor registrado':'Sem valor classificado')+'</small>'+
+        '<button class="action-btn" data-action="'+esc(c[4])+'" data-id="'+esc(id)+'" data-category="'+esc(c[3])+'">Registrar / conferir</button></article>').join('')+
+      '</div></section>';
     const sectionPanels=SECTIONS.slice(1).map(([key,label])=>{
       const rows=yearTx.filter(t=>section(t.category)===key);
       const incoming=sum(rows.filter(t=>t.kind==='in')),outgoing=sum(rows.filter(t=>t.kind==='out'));
@@ -123,7 +154,7 @@
       '<div class="warning">Há 3 ou mais competências seguidas com cobrança cadastrada sem quitação confirmada. Verificar extratos e pagamentos antes de qualquer exclusão ou perda de cotas. Nenhum bloqueio automático foi feito.</div>':'';
     const payout=official?.settlement({quotas});
     const settlementProjection=payout&&year==='2026'?'<div class="panel"><h3>Encerramento da caixinha — até 10 de dezembro</h3><p class="note">Valor-base teórico das cotas (R$ 50 × 11 meses): <strong>'+brl(payout.baseAccumulated)+'</strong>. Taxa administrativa de 4% sobre o valor bruto apurado; saldos de empréstimos até 30/11 poderão ser compensados. Distribuição final depende de conferir todas as entradas, eventos, juros e parcela apurada. Nenhuma quantia líquida definida e nenhum desconto executado.</p></div>':'';
-    return header+kpis+threeMonthAlert+
+    return header+kpis+categoryCards+threeMonthAlert+
      '<div class="panel"><h3>Mensalidades — janeiro a novembro de '+esc(year)+'</h3>'+
      '<p class="note">Por cota, em 2026: mensalidade-base de R$ 50,00 + adicional de R$ 20,00 (jan–abr), R$ 30,00 (mai–ago) ou R$ 40,00 (set–nov). Os valores do adicional não são lançados novamente no caixa. Não confundir com juros/penalidades já registrados separadamente. Sem comprovante significa <b>sem conferência</b>, não necessariamente atraso. Quando a competência não está indicada, o mês da entrada é apenas provisório.</p>'+
      '<div class="months-grid">'+months+'</div></div>'+
