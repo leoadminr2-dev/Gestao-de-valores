@@ -116,6 +116,10 @@
     const detail=postedTotal>0?' Há '+brl(postedTotal)+' em lançamentos já registrados no mesmo dia; confirme para evitar duplicidade.':'';
     openForm('Classificar depósito de '+brl(evidence.amount)+' — '+p.name,[
       {key:'decision',label:'Finalidade do depósito',type:'select',options:[{value:'caixinha',label:'Pertence à caixinha — lançar por categoria'},{value:'excluded',label:'Não pertence à caixinha — não lançar'}]},
+      {key:'payerFullName',label:'Nome e sobrenome COMPLETOS do remetente no comprovante (não use apenas o nome abreviado do extrato)',value:''},
+      {key:'payerRelation',label:'Relação do remetente com o associado',type:'select',options:[
+        {value:'',label:'Não confirmada'},{value:'associado',label:'É o próprio associado (identidade confirmada)'},{value:'terceiro',label:'É terceiro; vínculo explicado na observação'}
+      ]},
       {key:'monthly',label:'Mensalidade (R$)',type:'number',value:0,min:0,step:'0.01'},
       {key:'monthlyInterest',label:'Juros da mensalidade (R$)',type:'number',value:0,min:0,step:'0.01'},
       {key:'raffle',label:'Rifas (R$)',type:'number',value:0,min:0,step:'0.01'},
@@ -136,6 +140,13 @@
         evidence.classifiedAt=new Date().toISOString();
         return;
       }
+      const payerFullName=String(v.payerFullName||'').trim().replace(/\s+/g,' ');
+      if(payerFullName.split(' ').length<2)throw Error('Confira e informe primeiro e segundo nome do remetente no comprovante completo.');
+      if(!['associado','terceiro'].includes(v.payerRelation))throw Error('Confirme se o remetente é o associado ou um terceiro.');
+      if(v.payerRelation==='terceiro'&&String(v.notes||'').trim().length<12)throw Error('Explique o vínculo do terceiro com o associado e indique o comprovante.');
+      const bankAliasCheck=window.GestaoNominalAudit?.check(evidence.memo,{name:payerFullName},[{name:payerFullName}]);
+      if(bankAliasCheck&&['nome_divergente','segundo_nome_divergente'].includes(bankAliasCheck.level))
+        throw Error('O nome informado não corresponde ao nome abreviado do banco. Revise a identidade antes de lançar.');
       const alloc=[
         ['monthly','Mensalidade'],
         ['monthlyInterest','Juros de mensalidade'],
@@ -172,6 +183,8 @@
       evidence.status='classified';evidence.classificationTransactions=postedIds;
       evidence.classificationBreakdown=values.filter(x=>x.cents>0).map(x=>({category:x.category,amount:x.cents/100}));
       evidence.classificationNotes=v.notes.trim();evidence.classifiedAt=new Date().toISOString();
+      evidence.verifiedPayerFullName=payerFullName;
+      evidence.verifiedPayerRelation=v.payerRelation;
     });
   }
   function newPersonTransaction(id,preset=''){
