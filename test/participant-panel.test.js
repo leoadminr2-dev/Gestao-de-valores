@@ -30,16 +30,17 @@ function harness(){
 }
 test('painel mostra janeiro a novembro sem cadastrar 11 cobranças automáticas',()=>{
   const {state,render}=harness(),html=render();
-  assert.equal((html.match(/class="month-card"/g)||[]).length,11);
+  assert.equal((html.match(/class="panel sheet-section"/g)||[]).length,7);
+  assert.equal((html.match(/<td><strong>(Janeiro|Fevereiro|Março|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro)<\/strong><\/td>/g)||[]).length,11);
   assert.match(html,/Janeiro/);assert.match(html,/Novembro/);
   assert.match(html,/R\$ 140\.00/);assert.match(html,/R\$ 180\.00/);
   assert.equal(state.dues.length,1);assert.equal(state.transactions.length,6);
 });
 test('pagamento mensal registrado em due e transaction não soma duas vezes',()=>{
   const {render}=harness(),html=render();
-  const jan=html.match(/class="month-card"[\s\S]*?class="month-foot"/);
+  const jan=html.match(/<tr><td><strong>Janeiro<\/strong>[\s\S]*?<\/tr>/);
   assert.ok(jan);
-  assert.match(jan[0],/Pago no cadastro/);
+  assert.match(jan[0],/Conferido no cadastro/);
   assert.equal((jan[0].match(/R\$ 140\.00/g)||[]).length,2); // previsto e recebido, não 280
 });
 test('separa juros, rifas, eventos e empréstimo, sem imputar dívida a terceiro',()=>{
@@ -51,7 +52,8 @@ test('separa juros, rifas, eventos e empréstimo, sem imputar dívida a terceiro
 test('valor sem registro não aparece como atraso confirmado e anos futuros não recebem taxa de 2026',()=>{
   const {render}=harness(),now=render(),future=render('2027');
   assert.match(now,/Sem conferência/);
-  assert.match(future,/Não definido/);
+  assert.match(future,/Mês futuro|Sem conferência/);
+  assert.ok(!future.includes('R$ 180.00'));
 });
 test('informação do participante é escapada e nenhuma movimentação é feita na renderização',()=>{
   const {state,render,panel}=harness(),old=JSON.stringify(state),html=render();
@@ -68,9 +70,7 @@ test('10 cotas exibem R$500 de mensalidade, adicionais 200/300/400 e rifa R$100'
   state.dues=[];
   const html=render();
   const month=name=>{
-    const begin=html.indexOf('>'+name+'</strong>');
-    const end=html.indexOf('class="month-card"',begin+2);
-    return html.slice(begin,end<0?html.length:end);
+    return html.match(new RegExp('<tr><td><strong>'+name+'</strong>[\\s\\S]*?</tr>'))?.[0]||'';
   };
   assert.match(month('Janeiro'),/R\$ 500\.00/);
   assert.match(month('Janeiro'),/R\$ 200\.00/);
