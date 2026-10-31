@@ -231,7 +231,23 @@
   }
   function pageCash(){const tx=txs().filter(x=>!filter||`${x.description||''} ${x.category||''} ${person(x.participantId)}`.toLowerCase().includes(filter.toLowerCase())).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     return uiTitle('Livro-caixa','Histórico de entradas e saídas da caixinha','new-tx','+ Lançamento')+`<div class="inline-tools"><input id="find" placeholder="Buscar descrição ou pessoa" value="${esc(filter)}"></div>`+table(['Data','Natureza','Categoria','Pessoa','Descrição','Valor'],tx.map(x=>`<tr>${td(day(x.date))}${td(x.kind==='in'?'<span class="chip">Entrada</span>':'<span class="chip warn">Saída</span>')}${td(esc(x.category||''))}${td(esc(person(x.participantId)))}${td(esc(x.description||''))}${td(`<strong>${brl(x.amount)}</strong>`)}</tr>`));}
-  function pageReview(){const rev=state.review2026.filter(x=>!filter||`${x.person||''} ${x.detail||''} ${x.category||''}`.toLowerCase().includes(filter.toLowerCase()));return uiTitle('Conferência de 2026','Registros incompletos preservados, sem lançar saldo fictício')+`<div class="warning">Os registros listados abaixo não devem alterar o saldo sem verificação. Consulte o histórico do WhatsApp e os comprovantes.</div><div class="inline-tools"><input id="find" placeholder="Buscar pessoa ou observação" value="${esc(filter)}"><span class="muted">${rev.length} para verificar</span></div>`+table(['Data','Pessoa','Classificação','Valor citado','Observação'],rev.slice(0,250).map(x=>`<tr>${td(day(x.date))}${td(`<strong>${esc(x.person)}</strong>`)}${td(esc(x.category))}${td(x.amount===null?'—':brl(x.amount))}${td(`<div class="muted">${esc(String(x.detail||'').slice(0,240))}</div>`)}</tr>`))+(rev.length>250?'<p class="muted">Exibindo os primeiros 250 para economizar dados. Use o campo de busca para localizar os demais.</p>':'');}
+  function nominalAuditSummary(){
+    const a=state.audit2026?.nominalReview20261031;
+    if(!a)return '';
+    const groups=Array.isArray(a.ambiguousAliases)?a.ambiguousAliases:[];
+    const riskTotal=groups.reduce((sum,g)=>sum+Number(g.depositCount||0),0);
+    const riskMoney=groups.reduce((sum,g)=>sum+Number(g.amountCents||0)/100,0);
+    return '<section class="panel"><h3>Conferência nominal — primeiro e segundo nomes</h3>'+
+      '<p class="warning">Nomes abreviados não comprovam identidade. Há '+riskTotal+' créditos ('+brl(riskMoney)+') em grupos com homônimos, não lançados nem atribuídos a associados.</p>'+
+      '<p class="note">Dos '+esc(a.matchedToEvidence)+' depósitos vinculados a fichas, '+esc(a.nameLevels?.firstOnly||0)+' mostram somente o primeiro nome, '+
+      esc(a.nameLevels?.firstSecondAbbrev||0)+' mostram início do segundo, '+
+      esc(a.nameLevels?.registryMissingSecond||0)+' não têm segundo nome no cadastro e '+
+      esc(a.nameLevels?.nickname||0)+' dependem de apelido. Todos exigem documento de identificação do remetente.</p>'+
+      '<div class="table-wrap"><table><thead><tr><th>Nome abreviado do banco</th><th>Pessoas possíveis</th><th>Depósitos</th><th>Valor bancário (não classificado)</th></tr></thead><tbody>'+
+      groups.map(g=>'<tr><td><strong>'+esc(g.bankAlias)+'</strong></td><td>'+esc((g.possibleParticipants||[]).join(' / '))+'</td><td>'+esc(g.depositCount)+'</td><td>'+brl(Number(g.amountCents||0)/100)+'</td></tr>').join('')+
+      '</tbody></table></div><p class="note">O segundo nome completo deve ser conferido no comprovante original. Pagamento por terceiros só pode ser atribuído após comprovar o vínculo com o associado.</p></section>';
+  }
+  function pageReview(){const rev=state.review2026.filter(x=>!filter||`${x.person||''} ${x.detail||''} ${x.category||''}`.toLowerCase().includes(filter.toLowerCase()));return uiTitle('Conferência de 2026','Registros incompletos preservados, sem lançar saldo fictício')+nominalAuditSummary()+`<div class="warning">Os registros listados abaixo não devem alterar o saldo sem verificação. Consulte o histórico do WhatsApp e os comprovantes.</div><div class="inline-tools"><input id="find" placeholder="Buscar pessoa ou observação" value="${esc(filter)}"><span class="muted">${rev.length} para verificar</span></div>`+table(['Data','Pessoa','Classificação','Valor citado','Observação'],rev.slice(0,250).map(x=>`<tr>${td(day(x.date))}${td(`<strong>${esc(x.person)}</strong>`)}${td(esc(x.category))}${td(x.amount===null?'—':brl(x.amount))}${td(`<div class="muted">${esc(String(x.detail||'').slice(0,240))}</div>`)}</tr>`))+(rev.length>250?'<p class="muted">Exibindo os primeiros 250 para economizar dados. Use o campo de busca para localizar os demais.</p>':'');}
   function bankAuditSummary(){
     const audit=state.audit2026||{};
     const bank=audit.bankLoanReconciliation, tatiana=audit.tatianaItauJanJunReconciliation;
