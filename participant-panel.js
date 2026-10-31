@@ -107,6 +107,68 @@
         '<small>'+(c[1]?'Valor registrado':'Sem valor classificado')+'</small>'+
         '<button class="action-btn" data-action="'+esc(c[4])+'" data-id="'+esc(id)+'" data-category="'+esc(c[3])+'">Registrar / conferir</button></article>').join('')+
       '</div></section>';
+
+    // Apresentação estilo planilha: uma linha por competência, sem criar débitos ou receitas.
+    const worksheetRows=MONTHS.map((month,i)=>{
+      const m=year+'-'+String(i+1).padStart(2,'0');
+      const registered=dues.filter(d=>d.month===m);
+      const posted=tx.filter(t=>t.kind==='in'&&t.category==='Mensalidade'&&competence(t,dues)===m);
+      const bank=sum(posted),imported=registered.reduce((n,d)=>n+Number(d.paidAmount||0),0);
+      const paid=Math.max(bank,imported);
+      const forecast=fees[i]!==null&&fees[i]!==undefined&&quotas>0?Number(fees[i])*quotas:null;
+      const expected=registered.length?registered.reduce((n,d)=>n+Number(d.amount||0),0):forecast;
+      const base=basePerQuota!==null&&quotas>0?basePerQuota*quotas:null;
+      const extra=additionPerQuota[i]!==undefined&&additionPerQuota[i]!==null&&quotas>0?Number(additionPerQuota[i])*quotas:null;
+      const possibleBalance=expected===null?null:Math.max(0,expected-paid);
+      const verified=registered.length&&registered.every(d=>d.status==='paid')&&paid>0;
+      const inferred=posted.length&&posted.some(t=>!t.competence&&!t.dueId);
+      let status=verified?'Conferido no cadastro':paid>0?(expected!==null&&paid<expected-.005?'Parcial / conferir':'Registrado / conferir'):'Sem conferência';
+      if(m>now&&!paid)status='Mês futuro';
+      const cell=n=>n===null?'—':brl(n);
+      const mark=paid>0?brl(paid):'—';
+      return '<tr><td><strong>'+esc(month)+'</strong></td><td>'+esc(quotas||'—')+'</td><td>'+cell(base)+'</td>'+
+        '<td>'+cell(extra)+'</td><td><strong>'+cell(expected)+'</strong></td>'+
+        '<td><strong>'+mark+'</strong></td><td>'+(paid?cell(possibleBalance):'A conferir')+'</td>'+
+        '<td>'+esc(status)+(inferred?'<small class="person-row-sub">Competência pelo mês do depósito</small>':'')+'</td></tr>';
+    }).join('');
+    const worksheetMonths='<section class="panel sheet-section" id="sheet-months">'+
+      '<div class="sheet-header"><h3>1. MENSALIDADES — JANEIRO A NOVEMBRO</h3>'+
+      '<button class="action-btn" data-action="new-person-month" data-id="'+esc(id)+'">Lançar mensalidade</button></div>'+
+      '<p class="note">Uma linha por mês, como na planilha. R$ 50 por cota + adicional de R$ 20, R$ 30 ou R$ 40 conforme o período. Diferença é apenas referência para conferência, não cobrança automática.</p>'+
+      '<div class="table-wrap"><table class="sheet-table"><thead><tr><th>Mês</th><th>Cotas</th><th>Base</th><th>Adicional</th><th>Previsto</th><th>Registrado</th><th>Diferença*</th><th>Situação</th></tr></thead><tbody>'+worksheetRows+'</tbody></table></div></section>';
+    const sheetCategories=[
+      {title:'2. JUROS DA MENSALIDADE',category:'Juros de mensalidade',description:'10% por atraso, quando efetivamente identificado'},
+      {title:'3. RIFAS',category:'Rifa',description:'R$ '+rafflePerQuota.toFixed(2).replace('.',',')+' por bilhete; '+quotas+' cota(s) exigem '+quotas+' bilhete(s) por rifa'},
+      {title:'4. EVENTOS',category:'Evento',description:'Somente contribuições de eventos identificados'},
+      {title:'5. EMPRÉSTIMO',category:'Empréstimo concedido',description:'Concessões realizadas e juros contratuais'},
+      {title:'6. DEVOLUÇÃO DO EMPRÉSTIMO',category:'Pagamento de empréstimo',description:'Devolução do principal recebida, separada dos juros'},
+      {title:'7. JUROS DO EMPRÉSTIMO',category:'Juros de empréstimo',description:'Juros efetivamente recebidos, não apenas previstos'}
+    ];
+    const sheetTables=sheetCategories.map(c=>{
+      const entries=yearTx.filter(t=>section(t.category)===c.category).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+      const total=sum(entries.filter(t=>t.kind==='in'));
+      const isLoan=c.category==='Empréstimo concedido';
+      const loanOptions=isLoan?personLoans.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))):[];
+      const action=isLoan?'person-new-loan':['Pagamento de empréstimo','Juros de empréstimo'].includes(c.category)?'person-loan-payment':'person-category';
+      const label=isLoan?'Novo empréstimo':action==='person-loan-payment'?'Conferir contratos':'Registrar / conferir';
+      const loanRows=loanOptions.map(l=>'<tr><td>'+day(l.date)+'</td><td>'+brl(l.principal)+'</td><td>'+esc(l.rate||0)+'%</td>'+
+         '<td>'+brl(l.paidTotal||0)+'</td><td>'+brl(Math.max(0,loanTotal(l)-Number(l.paidTotal||0)))+'</td>'+
+         '<td>'+esc(l.status||'A revisar')+'</td></tr>').join('');
+      const standardRows=entries.map(t=>{
+        const comp=t.competence?'Competência '+t.competence:'';
+        const ref=[comp,t.description||'',t.notes||''].filter(Boolean).join(' · ');
+        return '<tr><td>'+day(t.date)+'</td><td>'+brl(t.amount)+'</td>'+
+         '<td>'+esc(t.kind==='out'?'Saída':'Entrada')+'</td><td>'+esc(ref||'Registro sem observação')+'</td></tr>';
+      }).join('');
+      const content=isLoan?'<div class="table-wrap"><table class="sheet-table"><thead><tr><th>Data</th><th>Principal</th><th>Juros</th><th>Recebido</th><th>Saldo estimado</th><th>Situação</th></tr></thead><tbody>'+loanRows+'</tbody></table></div>':
+       '<div class="table-wrap"><table class="sheet-table"><thead><tr><th>Data</th><th>Valor</th><th>Tipo</th><th>Observação</th></tr></thead><tbody>'+standardRows+'</tbody></table></div>';
+      return '<section class="panel sheet-section"><div class="sheet-header"><h3>'+esc(c.title)+'</h3>'+
+        '<button class="action-btn" data-action="'+esc(action)+'" data-id="'+esc(id)+'" data-category="'+esc(c.category)+'">'+esc(label)+'</button></div>'+
+        '<p class="sheet-subtitle">'+esc(c.description)+'</p>'+
+        (isLoan?'<p class="sheet-subtitle">Total concedido: '+brl(personLoans.reduce((n,l)=>n+Number(l.principal||0),0))+'</p>':'<p class="sheet-subtitle">Total recebido nesta categoria: <strong>'+brl(total)+'</strong></p>')+
+        ((isLoan?loanOptions.length:entries.length)?content:'<p class="person-empty">Nenhum lançamento classificado. Isso não significa que o associado não pagou.</p>')+'</section>';
+    }).join('');
+    const sheetIntro='<div class="panel"><h3>Ficha organizada como planilha</h3><p class="note">As seções ficam sempre na mesma ordem. Valores de extrato ainda não conciliados aparecem mais abaixo, sem aumentar os recebimentos registrados.</p></div>';
     const evidence=Array.isArray(participant.bankEvidence2026)?participant.bankEvidence2026.filter(x=>isYear(x.date,year)):[];
     const pending=evidence.filter(x=>x.status==='pending');
     const pendingAmount=pending.reduce((n,x)=>n+Number(x.amount||0),0);
@@ -165,11 +227,9 @@
       '<div class="warning">Há 3 ou mais competências seguidas com cobrança cadastrada sem quitação confirmada. Verificar extratos e pagamentos antes de qualquer exclusão ou perda de cotas. Nenhum bloqueio automático foi feito.</div>':'';
     const payout=official?.settlement({quotas});
     const settlementProjection=payout&&year==='2026'?'<div class="panel"><h3>Encerramento da caixinha — até 10 de dezembro</h3><p class="note">Valor-base teórico das cotas (R$ 50 × 11 meses): <strong>'+brl(payout.baseAccumulated)+'</strong>. Taxa administrativa de 4% sobre o valor bruto apurado; saldos de empréstimos até 30/11 poderão ser compensados. Distribuição final depende de conferir todas as entradas, eventos, juros e parcela apurada. Nenhuma quantia líquida definida e nenhum desconto executado.</p></div>':'';
-    return header+kpis+categoryCards+proof+threeMonthAlert+
-     '<div class="panel"><h3>Mensalidades — janeiro a novembro de '+esc(year)+'</h3>'+
-     '<p class="note">Por cota, em 2026: mensalidade-base de R$ 50,00 + adicional de R$ 20,00 (jan–abr), R$ 30,00 (mai–ago) ou R$ 40,00 (set–nov). Os valores do adicional não são lançados novamente no caixa. Não confundir com juros/penalidades já registrados separadamente. Sem comprovante significa <b>sem conferência</b>, não necessariamente atraso. Quando a competência não está indicada, o mês da entrada é apenas provisório.</p>'+
-     '<div class="months-grid">'+months+'</div></div>'+
-     '<div class="person-categories">'+sectionPanels+'</div>'+loanTable+settlementProjection+ledger;
+    return header+sheetIntro+worksheetMonths+sheetTables+proof+threeMonthAlert+
+      '<details class="sheet-more"><summary>Ver informações adicionais e histórico completo</summary>'+
+      kpis+categoryCards+settlementProjection+ledger+'</details>';
   }
   window.GestaoPersonPanel={render:report,section,competence,sections:SECTIONS.map(x=>x[0])};
 })();
