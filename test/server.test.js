@@ -106,3 +106,31 @@ test('entregar comparador nominal sem expor associados ou extratos no JavaScript
   assert.ok(js.includes('GestaoNominalAudit'));
   assert.ok(!js.includes('Alessandra Alves'));
 });
+
+test('pagina independente dos participantes nao exibe dados administrativos',async()=>{
+ const r=await fetch(app+'/associado');
+ assert.equal(r.status,200);
+ const source=await r.text();
+ assert.ok(source.includes('Meus comprovantes'));
+ assert.ok(!source.includes('app_state'));
+});
+test('pagina de conferencia dos responsaveis nao entrega dados sem autenticacao',async()=>{
+ const page=await fetch(app+'/comprovantes-admin');
+ assert.equal(page.status,200);
+ const api=await call('/api/portal/admin/list');
+ assert.equal(api.status,401);
+});
+test('consultas dos associados sem link pessoal sao recusadas',async()=>{
+ const a=await call('/api/portal/me');
+ assert.equal(a.status,401);
+ const b=await call('/api/portal/submit','POST',{payerName:'Teste Pessoa',amountCents:1000});
+ assert.equal(b.status,401);
+});
+test('rotas de comprovantes e anexos sao entregues com CSP e no-store',async()=>{
+ for(const target of ['/portal-participant.js','/portal-admin.js']){
+  const r=await fetch(app+target);
+  assert.equal(r.status,200);
+  assert.match(r.headers.get('content-type'),/javascript/);
+  assert.match(r.headers.get('cache-control'),/no-store/);
+ }
+});
