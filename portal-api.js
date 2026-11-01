@@ -93,6 +93,12 @@ function createPortalApi({getAccess,dataApi,bodyJson,respond,headers,appOrigin})
  }
  async function handle(req,res,url){
    if(!rateAllowed(req)){respond(res,429,{error:'Muitas tentativas. Tente novamente em instantes.'});return;}
+   if(req.method==='GET'&&url.pathname==='/api/portal/ready'){
+     try{await database().query('SELECT 1 AS ok');respond(res,200,{ready:true});}
+     catch{respond(res,503,{ready:false,error:'Recebimento de comprovantes indisponível.'});}
+     return;
+   }
+
    if(url.pathname.startsWith('/api/portal/admin/')){
      const access=await admin(req,res);if(!access)return;
      if(req.method==='GET'&&url.pathname==='/api/portal/admin/participants'){
