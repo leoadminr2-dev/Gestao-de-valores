@@ -6,10 +6,12 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test test/*.test.js",
-    "build": "node --check server.js && node --check secure-client.js && node --check caixinha-rules.js && node --check nominal-audit.js && node --check participant-panel.js && node --check app-ui.js && npm test"
+    "build": "node --check portal-api.js && node --check portal-participant.js && node --check portal-admin.js && node --check server.js && node --check secure-client.js && node --check caixinha-rules.js && node --check nominal-audit.js && node --check participant-panel.js && node --check app-ui.js && npm test"
   },
   "engines": {
     "node": ">=20"
   },
-  "dependencies": {}
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
 }
