@@ -95,6 +95,12 @@ function createPortalApi({getAccess,dataApi,bodyJson,respond,headers,appOrigin})
    if(!rateAllowed(req)){respond(res,429,{error:'Muitas tentativas. Tente novamente em instantes.'});return;}
    if(url.pathname.startsWith('/api/portal/admin/')){
      const access=await admin(req,res);if(!access)return;
+     if(req.method==='GET'&&url.pathname==='/api/portal/admin/participants'){
+       const a=await dataApi('app_state?select=data&slot=eq.primary',access);
+       if(!a.up.ok||!Array.isArray(a.data)||a.data.length!==1){respond(res,502,{error:'Cadastro dos associados indisponível.'});return;}
+       const people=(a.data[0].data.participants||[]).map(p=>({id:p.id,name:p.name})).filter(p=>p.id&&p.name);
+       respond(res,200,{participants:people});return;
+     }
      if(req.method==='POST'&&url.pathname==='/api/portal/admin/invite')return invite(req,res,access);
      if(req.method==='GET'&&url.pathname==='/api/portal/admin/list'){
       const [receipts,links]=await Promise.all([
