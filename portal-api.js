@@ -139,6 +139,8 @@ function createPortalApi({getAccess,dataApi,bodyJson,respond,headers,appOrigin})
      const b=await bodyJson(req),r=parseReceipt(b);
      const last=await database().query("SELECT count(*)::integer AS total FROM public.portal_receipts WHERE invite_id=$1 AND submitted_at>now()-interval '30 days'",[invitation.id]);
      if(Number(last.rows[0]?.total)>30){respond(res,429,{error:'Limite de 30 envios em 30 dias. Contate os responsáveis.'});return;}
+     const storage=await database().query("SELECT pg_total_relation_size('public.portal_receipts')::bigint AS bytes");
+     if(Number(storage.rows[0]?.bytes)>180*1024*1024){respond(res,507,{error:'Armazenamento gratuito de comprovantes atingiu o limite seguro. Contate os responsáveis.'});return;}
      const duplicate=await database().query('SELECT id FROM public.portal_receipts WHERE participant_id=$1 AND receipt_sha256=$2 AND amount_cents=$3 LIMIT 1',[invitation.participant_id,r.fileHash,r.cents]);
      if(duplicate.rowCount){respond(res,409,{error:'Este comprovante já foi enviado anteriormente.'});return;}
      const q=await database().query('INSERT INTO public.portal_receipts (invite_id,participant_id,payer_full_name,amount_cents,paid_on,allocations,notes,receipt_media_type,receipt_filename,receipt_bytes,receipt_sha256) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11) RETURNING id,submitted_at,status',[invitation.id,invitation.participant_id,r.name,r.cents,r.paid,JSON.stringify(r.alloc),r.notes,r.type,r.filename,r.bytes,r.fileHash]);
