@@ -18,7 +18,7 @@
    items.map(row=>{
     const allocations=(row.allocations||[]).map(a=>esc(a.category)+(a.competence?' ('+esc(a.competence)+')':'')+': <b>'+brl(a.cents)+'</b>').join('<br>');
     const status=row.status==='pending'?'Pendente':row.status==='reviewed'?'Conferido — sem lançar':'Correção solicitada';
-    return '<tr><td><strong>'+esc(row.payer_full_name)+'</strong><small>Cadastro: '+esc(row.participant_id)+'</small>'+
+    return '<tr><td><strong>'+esc(row.payer_full_name)+'</strong><small>Cadastro: '+esc(row.participant_name||row.participant_id)+'</small>'+
        '<small>Enviado em '+esc(new Date(row.submitted_at).toLocaleDateString('pt-BR'))+'</small></td>'+
        '<td><strong>'+brl(row.amount_cents)+'</strong><small>Pix de '+esc(String(row.paid_on).slice(0,10))+'</small></td>'+
        '<td>'+allocations+(row.notes?'<small>'+esc(row.notes)+'</small>':'')+'</td>'+
