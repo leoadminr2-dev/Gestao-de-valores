@@ -153,8 +153,10 @@ async function authHandler(req,res,url){
   }
   respond(res,404,{error:'Não encontrado.'});
 }
+const portalApi=require('./portal-api').createPortalApi({getAccess,dataApi,bodyJson,respond,headers,appOrigin:APP_ORIGIN});
 function staticFile(res,urlPath){
   const paths={'/':'index.html','/index.html':'index.html','/secure-client.js':'secure-client.js','/app-ui.js':'app-ui.js','/participant-panel.js':'participant-panel.js','/nominal-audit.js':'nominal-audit.js','/caixinha-rules.js':'caixinha-rules.js',
+    '/associado':'portal-participant.html','/comprovantes-admin':'portal-admin.html','/portal-participant.js':'portal-participant.js','/portal-admin.js':'portal-admin.js',
     '/manifest.webmanifest':'manifest.webmanifest','/sw.js':'sw.js', '/icon.svg':'icon.svg'};
   if(!paths[urlPath]){respond(res,404,{error:'Não encontrado.'});return;}
   const file=path.join(BASE,paths[urlPath]);
@@ -175,6 +177,7 @@ const server=http.createServer(async(req,res)=>{
       if(req.method!=='GET'&&!sameOrigin(req)){respond(res,403,{error:'Origem não autorizada.'});return;}
       if(url.pathname.startsWith('/api/auth/'))await authHandler(req,res,url);
       else if(url.pathname==='/api/state'||url.pathname==='/api/session'||url.pathname==='/api/version')await dataHandler(req,res,url);
+      else if(url.pathname.startsWith('/api/portal/')) await portalApi.handle(req,res,url);
       else respond(res,404,{error:'Não encontrado.'});
       return;
     }
