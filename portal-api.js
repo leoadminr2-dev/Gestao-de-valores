@@ -104,7 +104,7 @@ function createPortalApi({getAccess,dataApi,bodyJson,respond,headers,appOrigin})
      if(req.method==='POST'&&url.pathname==='/api/portal/admin/invite')return invite(req,res,access);
      if(req.method==='GET'&&url.pathname==='/api/portal/admin/list'){
       const [receipts,links]=await Promise.all([
-       database().query("SELECT id,participant_id,payer_full_name,amount_cents,paid_on,allocations,notes,status,review_notes,submitted_at,receipt_filename,reviewed_at FROM public.portal_receipts ORDER BY submitted_at DESC LIMIT 400"),
+       database().query("SELECT r.id,r.participant_id,i.participant_name,r.payer_full_name,r.amount_cents,r.paid_on,r.allocations,r.notes,r.status,r.review_notes,r.submitted_at,r.receipt_filename,r.reviewed_at FROM public.portal_receipts r JOIN public.portal_invites i ON i.id=r.invite_id ORDER BY r.submitted_at DESC LIMIT 400"),
        database().query("SELECT id,participant_id,participant_name,is_active,expires_at,created_at,revoked_at FROM public.portal_invites ORDER BY created_at DESC LIMIT 200")]);
       respond(res,200,{receipts:receipts.rows,links:links.rows});return;
      }
@@ -132,7 +132,7 @@ function createPortalApi({getAccess,dataApi,bodyJson,respond,headers,appOrigin})
    }
    const invitation=await byInvite(req,res);if(!invitation)return;
    if(req.method==='GET'&&url.pathname==='/api/portal/me'){
-     const rows=await database().query('SELECT id,amount_cents,paid_on,allocations,status,review_notes,submitted_at FROM public.portal_receipts WHERE invite_id=$1 ORDER BY submitted_at DESC LIMIT 70',[invitation.id]);
+     const rows=await database().query('SELECT id,amount_cents,paid_on,allocations,status,review_notes,submitted_at FROM public.portal_receipts WHERE participant_id=$1 ORDER BY submitted_at DESC LIMIT 70',[invitation.participant_id]);
      respond(res,200,{name:invitation.participant_name,expiresAt:invitation.expires_at,submissions:rows.rows});return;
    }
    if(req.method==='POST'&&url.pathname==='/api/portal/submit'){
