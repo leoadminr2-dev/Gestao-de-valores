@@ -202,14 +202,15 @@ function createCaixinha27Api({getAccess,bodyJson,respond,headers}) {
     const m=await member(req,res,respond);if(!m)return;
     if(p==='/api/2027/me'&&req.method==='GET'){
       const db=database();
-      const [receipts,ledger,events,numbers,occupied]=await Promise.all([
+      const [receipts,ledger,approved,events,numbers,occupied]=await Promise.all([
         db.query('SELECT id,amount_cents,paid_on,allocations,status,review_notes,submitted_at FROM public.cx27_receipts WHERE member_id=$1 ORDER BY submitted_at DESC LIMIT 100',[m.id]),
         db.query('SELECT category,amount_cents,competence,event_name,created_at FROM public.cx27_ledger WHERE member_id=$1 ORDER BY created_at DESC LIMIT 300',[m.id]),
+        db.query('SELECT coalesce(sum(amount_cents),0)::bigint AS total FROM public.cx27_ledger WHERE member_id=$1',[m.id]),
         db.query('SELECT id,title,description,event_date,total_numbers,status FROM public.cx27_events ORDER BY created_at DESC LIMIT 50'),
         db.query('SELECT event_id,number FROM public.cx27_event_numbers WHERE member_id=$1 ORDER BY number',[m.id]),
         db.query('SELECT event_id,number FROM public.cx27_event_numbers')
       ]);
-      respond(res,200,{member:{name:m.full_name,cpfLast4:m.cpf_last4,phone:m.phone,address:m.address},receipts:receipts.rows,ledger:ledger.rows,events:events.rows,numbers:numbers.rows,occupied:occupied.rows});return;
+      respond(res,200,{member:{name:m.full_name,cpfLast4:m.cpf_last4,phone:m.phone,address:m.address},receipts:receipts.rows,ledger:ledger.rows,approvedCents:approved.rows[0].total,events:events.rows,numbers:numbers.rows,occupied:occupied.rows});return;
     }
     if(p==='/api/2027/receipt'&&req.method==='POST'){
       rate(req,'receipt',10);const r=parseReceipt(await bodyJson(req));
@@ -229,7 +230,7 @@ function createCaixinha27Api({getAccess,bodyJson,respond,headers}) {
       const client=await database().connect();
       try{
         await client.query('BEGIN');
-        const ev=await client.query('SELECT id,total_numbers,status,event_date FROM public.cx27_events WHERE id=$1 FOR UPDATE',[id]);
+        const ev=await client.query('SELECT id,total_numbers,status,event_date::text AS event_date FROM public.cx27_events WHERE id=$1 FOR UPDATE',[id]);
         if(!ev.rowCount||ev.rows[0].status!=='open'||ev.rows[0].event_date&&String(ev.rows[0].event_date).slice(0,10)<new Date().toISOString().slice(0,10))throw fail('Evento não disponível.',409);
         if(nums.some(n=>n>ev.rows[0].total_numbers))throw fail('Número fora da faixa deste evento.');
         for(const n of nums)await client.query('INSERT INTO public.cx27_event_numbers (event_id,number,member_id) VALUES($1,$2,$3)',[id,n,m.id]);
