@@ -54,8 +54,12 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
   <div class="stat">Números em eventos<strong id="numbersCount">0</strong></div>
  </div><p class="muted">Os valores exibidos são comprovantes aprovados, não o saldo líquido final de empréstimos ou rendimentos.</p></div>
  <section class="panel">
-  <nav class="tabbar" id="tabs"><button class="selected" data-tab="payments">Meus pagamentos</button><button data-tab="submit">Enviar comprovante</button><button data-tab="events">Eventos e rifas</button><button data-tab="profile">Meus dados</button></nav>
+  <nav class="tabbar" id="tabs"><button class="selected" data-tab="payments">Meus pagamentos</button><button data-tab="submit">Enviar comprovante</button><button data-tab="ledger">Meu extrato</button><button data-tab="events">Eventos e rifas</button><button data-tab="profile">Meus dados</button></nav>
   <div id="tab-payments"><h2>Histórico de pagamentos</h2><div class="scroller"><table><thead><tr><th>Data</th><th>Valor</th><th>Finalidade</th><th>Situação</th></tr></thead><tbody id="receiptRows"></tbody></table></div></div>
+  <div id="tab-ledger" hidden><h2>Meu extrato de pagamentos conferidos</h2><p class="help">Apenas valores aprovados após conferência bancária aparecem neste extrato. Não representa o saldo líquido, o valor disponível para saque ou a distribuição final.</p>
+   <div id="ledgerByCategory" class="grid3"></div>
+   <div class="scroller"><table><thead><tr><th>Conferido em</th><th>Finalidade</th><th>Referência</th><th>Valor</th></tr></thead><tbody id="ledgerRows"></tbody></table></div>
+  </div>
   <div id="tab-submit" hidden><h2>Informar depósito</h2><p class="help">Informe a data e o valor do depósito, selecione uma ou mais finalidades e anexe o comprovante. Somente valores conferidos com o extrato serão reconhecidos.</p>
    <form id="receiptForm"><div class="grid2"><div><label for="paidOn">Data do depósito</label><input id="paidOn" type="date" min="2027-01-01" max="2027-12-31" required></div><div><label for="amount">Valor total (R$)</label><input id="amount" inputmode="decimal" placeholder="100,00" required></div></div>
    <div id="allocationList"></div><button type="button" class="secondary" id="addAllocation">+ Adicionar finalidade</button>
