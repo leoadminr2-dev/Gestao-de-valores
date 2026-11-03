@@ -35,12 +35,35 @@
  function readFile(file){return new Promise((resolve,reject)=>{
   const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(Error('Não foi possível ler o comprovante.'));reader.readAsDataURL(file);
  });}
+ async function prepareFile(file) {
+  const max=1024*1024;
+  if (!file) throw Error('Selecione o comprovante.');
+  if (!['image/jpeg','image/png','application/pdf'].includes(file.type)) throw Error('Use um arquivo JPG, PNG ou PDF.');
+  if (file.size<=max) return {fileType:file.type,fileName:file.name,fileBase64:await readFile(file)};
+  if (file.type==='application/pdf') throw Error('O PDF ultrapassa 1 MB. Envie uma versão menor.');
+  const url=URL.createObjectURL(file);let img;
+  try {img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(Error('Não foi possível abrir esta foto.'));i.src=url;});}
+  finally {URL.revokeObjectURL(url);}
+  const canvas=document.createElement('canvas');
+  const scale=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight));
+  canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+  canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+  const ctx=canvas.getContext('2d');if(!ctx)throw Error('O navegador não permitiu preparar a imagem.');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  let base64='';
+  for(const quality of [0.82,0.68,0.52,0.38]){
+   base64=canvas.toDataURL('image/jpeg',quality).split(',')[1]||'';
+   if(Math.ceil(base64.length*3/4)<=max)break;
+  }
+  if(Math.ceil(base64.length*3/4)>max)throw Error('A foto ainda está muito grande. Faça um recorte mais próximo do comprovante.');
+  return {fileType:'image/jpeg',fileName:file.name.replace(/\.(jpg|jpeg|png)$/i,'')+'.jpg',fileBase64:base64};
+ }
  $('receiptForm').onsubmit=async e=>{e.preventDefault();const btn=$('sendReceipt');btn.disabled=true;try{
-  const file=$('receiptFile').files[0];if(!file||file.size>300*1024)throw Error('Anexe um comprovante de até 300 KB.');
+  const receiptFile=await prepareFile($('receiptFile').files[0]);
   const amountCents=cents($('amount').value),allocations=[...document.querySelectorAll('.allocation')].map(el=>({
    category:el.querySelector('.cat').value,amountCents:cents(el.querySelector('.part').value),competence:el.querySelector('.month').value,eventName:el.querySelector('.event').value.trim()
   }));
-  await api('receipt','POST',{paidOn:$('paidOn').value,amountCents,allocations,notes:$('notes').value,fileType:file.type,fileName:file.name,fileBase64:await readFile(file)});
+  await api('receipt','POST',{paidOn:$('paidOn').value,amountCents,allocations,notes:$('notes').value,...receiptFile});
   $('receiptForm').reset();$('allocationList').innerHTML='';allocRow();await load();tab('payments');tell('Comprovante recebido e aguardando conferência administrativa.');
  }catch(err){tell(err.message,true);}finally{btn.disabled=false;}};
  function status(s){return s==='approved'?'<span class="tag ok">Aprovado</span>':s==='rejected'?'<span class="tag no">Correção solicitada</span>':'<span class="tag">Pendente</span>';}
