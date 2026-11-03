@@ -49,9 +49,9 @@ function validDate(s) {
   const d=new Date(s+'T12:00:00Z');
   return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===s;
 }
-function parseReceipt(b, requireFile = true) {
+function parseReceipt(b, requireFile = true, today = new Date().toISOString().slice(0,10)) {
   const paidOn=String(b.paidOn||''), cents=Number(b.amountCents);
-  if(!validDate(paidOn)||paidOn>new Date().toISOString().slice(0,10)) throw fail('Informe a data válida do pagamento de 2027.');
+  if(!validDate(paidOn)||paidOn>today) throw fail('Informe a data válida do pagamento de 2027.');
   if(!Number.isSafeInteger(cents)||cents<1||cents>20000000)throw fail('Valor inválido.');
   if(!Array.isArray(b.allocations)||!b.allocations.length||b.allocations.length>20)throw fail('Informe de 1 a 20 finalidades.');
   let sum=0;
@@ -204,7 +204,7 @@ function createCaixinha27Api({getAccess,bodyJson,respond,headers}) {
     if(p==='/api/2027/me'&&req.method==='GET'){
       const db=database();
       const [receipts,ledger,approved,events,numbers,occupied]=await Promise.all([
-        db.query('SELECT id,amount_cents,paid_on,allocations,status,review_notes,submitted_at FROM cx27.receipts WHERE member_id=$1 ORDER BY submitted_at DESC LIMIT 100',[m.id]),
+        db.query('SELECT id,amount_cents,paid_on,allocations,notes,status,review_notes,submitted_at FROM cx27.receipts WHERE member_id=$1 ORDER BY submitted_at DESC LIMIT 100',[m.id]),
         db.query('SELECT category,amount_cents,competence,event_name,created_at FROM cx27.ledger WHERE member_id=$1 ORDER BY created_at DESC LIMIT 300',[m.id]),
         db.query('SELECT coalesce(sum(amount_cents),0)::bigint AS total FROM cx27.ledger WHERE member_id=$1',[m.id]),
         db.query('SELECT id,title,description,event_date,total_numbers,status FROM cx27.events ORDER BY created_at DESC LIMIT 50'),
