@@ -19,7 +19,7 @@ test('datas obrigatoriamente pertencem ao exercício de 2027 e são reais',()=>{
  assert.equal(validDate('2027-01-01'),true);
 });
 test('assinaturas reais dos anexos e tamanho',()=>{
- assert.equal(MAX_BYTES,300*1024);
+ assert.equal(MAX_BYTES,1024*1024);
  assert.equal(fileOk(Buffer.from([255,216,255,0,0,0]),'image/jpeg'),true);
  assert.equal(fileOk(Buffer.from('%PDF-1.7 extra'), 'application/pdf'),true);
  assert.equal(fileOk(Buffer.from('not a PDF'), 'application/pdf'),false);
