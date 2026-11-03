@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Central do Associado | Caixinha 2027</title>
+<style>
+:root{--navy:#102a42;--deep:#0b1c31;--green:#138a71;--lite:#eaf6f2;--line:#dde5ed;--muted:#54677c;--white:#fff;--bg:#f3f6fb}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--deep);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+header{background:linear-gradient(115deg,#08243d,#15546a);color:white;padding:29px max(20px,calc((100vw - 1100px)/2));box-shadow:0 3px 14px #122e3b14}
+header .eyebrow{font-size:15px;letter-spacing:2px;font-weight:900;color:#aff5db}h1{font-size:clamp(26px,4vw,40px);margin:5px 0}header p{margin:0;color:#d3eaf1}
+main{max-width:1100px;margin:24px auto 70px;padding:0 18px}.panel{background:white;border:1px solid var(--line);border-radius:17px;padding:23px;margin-bottom:16px;box-shadow:0 5px 25px #172f4b0a}
+h2{font-size:22px;margin:0 0 14px}h3{font-size:17px;margin:0 0 10px}.muted,small{color:var(--muted)}
+label{font-weight:650;display:block;margin:12px 0 5px}input,select,textarea{font:inherit;width:100%;min-height:43px;padding:10px 12px;border:1px solid #b8c8d7;border-radius:9px;background:#fff;color:#102a42}
+input:focus,select:focus,textarea:focus{outline:2px solid #7bdbc2;border-color:#0e846b}textarea{min-height:80px}
+button,.btn{background:var(--green);color:white;padding:12px 17px;border:0;border-radius:9px;cursor:pointer;font:inherit;font-weight:750;min-height:43px}
+button:disabled{opacity:.45;cursor:not-allowed}button.secondary{background:#e9f0f7;color:#16354a}button.danger{background:#bb3c41}
+a{color:#0c6c68}.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.stat{background:#f3f8fa;border:1px solid #d7e9eb;border-radius:13px;padding:18px}.stat strong{display:block;font-size:26px;margin-top:7px}
+.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}.tabbar{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
+.tabbar button{background:#e8eef5;color:#1d4258}.tabbar button.selected{background:var(--navy);color:#fff}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:11px 8px;border-bottom:1px solid var(--line)}.scroller{overflow-x:auto}
+.tag{display:inline-block;padding:4px 8px;border-radius:40px;background:#fff1d9;color:#784f09;font-size:12px;font-weight:750}
+.tag.ok{background:#ddf5eb;color:#146146}.tag.no{background:#ffe7e6;color:#8b3334}
+.numbergrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(57px,1fr));gap:7px;margin:14px 0}
+.num{background:#e6f4ee;color:#135f4f;border:1px solid #baded1;padding:10px 4px}.num.mine{background:#d7e7fa;color:#18476a}.num.selected{background:#146f5d;color:#fff}.num.taken{background:#eee;color:#8794a0;text-decoration:line-through}
+.notice{padding:13px 16px;border-radius:10px;background:#e7f6f1;color:#125d49;margin:16px 0}.notice.bad{background:#ffe9e9;color:#842728}
+.flex{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}.item{border:1px solid #e0e9ef;padding:14px;border-radius:12px;margin:10px 0}
+.help{background:#eff6fb;padding:14px;border-radius:10px;font-size:14px}#app{display:none}#loginArea{max-width:750px;margin:auto}
+@media(max-width:640px){header{padding:25px 20px}.grid2,.grid3{grid-template-columns:1fr}.panel{padding:17px}.stat strong{font-size:23px}.tabbar button{flex:1 1 46%}th,td{min-width:90px}main{margin-top:14px}}
+</style></head><body>
+<header><div class="eyebrow">CAIXINHA • 2027</div><h1>Central do Associado</h1><p>Gestão financeira e eventos em um só lugar.</p></header>
+<main>
+<div id="alert" class="notice" role="status" hidden></div>
+<section id="loginArea" class="panel">
+ <div class="tabbar"><button id="showLogin" class="selected" type="button">Já sou associado</button><button id="showRegister" type="button">Fazer meu cadastro</button></div>
+ <form id="loginForm"><h2>Entrar na minha área</h2><p class="muted">Acesso individual, depois da aprovação do cadastro.</p>
+  <label for="loginCpf">CPF</label><input id="loginCpf" inputmode="numeric" autocomplete="username" placeholder="000.000.000-00" required maxlength="14">
+  <label for="loginPassword">Senha</label><input id="loginPassword" type="password" autocomplete="current-password" required>
+  <div class="actions"><button type="submit">Entrar</button></div>
+ </form>
+ <form id="registerForm" hidden><h2>Cadastro de associado</h2><p class="muted">Seus dados são utilizados somente para identificar a associação e seus comprovantes.</p>
+  <label for="fullName">Nome completo</label><input id="fullName" autocomplete="name" minlength="5" maxlength="120" required>
+  <div class="grid2"><div><label for="cpf">CPF</label><input id="cpf" inputmode="numeric" maxlength="14" required placeholder="000.000.000-00"></div>
+  <div><label for="phone">Telefone com DDD</label><input id="phone" inputmode="tel" autocomplete="tel" maxlength="18" placeholder="(21) 99999-9999" required></div></div>
+  <label for="address">Endereço completo</label><textarea id="address" autocomplete="street-address" maxlength="240" placeholder="Rua, número, complemento, bairro, cidade, UF e CEP" required></textarea>
+  <label for="password">Crie sua senha (mínimo de 10 caracteres)</label><input id="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required>
+  <p class="help">O cadastro ficará pendente até a conferência da administração. O CPF é protegido para identificação, e não fica exposto aos demais participantes.</p>
+  <button type="submit">Solicitar meu cadastro</button>
+ </form>
+</section>
+<section id="app">
+ <div class="panel flex"><div><h2 style="margin-bottom:2px">Olá, <span id="memberName"></span></h2><div class="muted">CPF terminado em <span id="cpfLast4"></span></div></div><button id="logout" class="secondary">Sair da conta</button></div>
+ <div class="panel"><div class="grid3">
+  <div class="stat">Depósitos conferidos<strong id="approvedTotal">R$ 0,00</strong></div>
+  <div class="stat">Comprovantes pendentes<strong id="pendingCount">0</strong></div>
+  <div class="stat">Números em eventos<strong id="numbersCount">0</strong></div>
+ </div><p class="muted">Os valores exibidos são comprovantes aprovados, não o saldo líquido final de empréstimos ou rendimentos.</p></div>
+ <section class="panel">
+  <nav class="tabbar" id="tabs"><button class="selected" data-tab="payments">Meus pagamentos</button><button data-tab="submit">Enviar comprovante</button><button data-tab="ledger">Meu extrato</button><button data-tab="events">Eventos e rifas</button><button data-tab="profile">Meus dados</button></nav>
+  <div id="tab-payments"><h2>Histórico de pagamentos</h2><div class="scroller"><table><thead><tr><th>Data</th><th>Valor</th><th>Finalidade</th><th>Situação</th></tr></thead><tbody id="receiptRows"></tbody></table></div></div>
+  <div id="tab-ledger" hidden><h2>Meu extrato de pagamentos conferidos</h2><p class="help">Apenas valores aprovados após conferência bancária aparecem neste extrato. Não representa o saldo líquido, o valor disponível para saque ou a distribuição final.</p>
+   <div id="ledgerByCategory" class="grid3"></div>
+   <div class="scroller"><table><thead><tr><th>Conferido em</th><th>Finalidade</th><th>Referência</th><th>Valor</th></tr></thead><tbody id="ledgerRows"></tbody></table></div>
+  </div>
+  <div id="tab-submit" hidden><h2>Informar depósito</h2><p class="help">Informe a data e o valor do depósito, selecione uma ou mais finalidades e anexe o comprovante. Somente valores conferidos com o extrato serão reconhecidos.</p>
+   <form id="receiptForm"><div class="grid2"><div><label for="paidOn">Data do depósito</label><input id="paidOn" type="date" min="2027-01-01" max="2027-12-31" required></div><div><label for="amount">Valor total (R$)</label><input id="amount" inputmode="decimal" placeholder="100,00" required></div></div>
+   <div id="allocationList"></div><button type="button" class="secondary" id="addAllocation">+ Adicionar finalidade</button>
+   <label for="receiptFile">Comprovante JPG, PNG ou PDF (até 1 MB; fotos grandes serão reduzidas automaticamente)</label><input id="receiptFile" type="file" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" required>
+   <label for="notes">Observação (opcional)</label><textarea id="notes" maxlength="800" placeholder="Ex.: pagamento da mensalidade de janeiro"></textarea>
+   <div class="actions"><button id="sendReceipt" type="submit">Enviar comprovante</button><button id="cancelCorrection" type="button" class="secondary" hidden>Cancelar correção</button></div></form>
+  </div>
+  <div id="tab-events" hidden><h2>Eventos e rifas de 2027</h2><p class="muted">Os números só são confirmados quando a mensagem de sucesso aparece. A seleção não representa pagamento nem quitação.</p><div id="eventList"></div>
+  <p class="help">O <a href="https://headless-qlvbtdbhplr-leoadminr2-140a.wix-site-host.com/" target="_blank" rel="noopener noreferrer">Evento de Final de Ano 2026</a> permanece em sua página própria. Os eventos cadastrados aqui pertencem ao ciclo de 2027.</p></div>
+  <div id="tab-profile" hidden><h2>Meu cadastro</h2><p><strong>Nome:</strong> <span id="profileName"></span></p><p><strong>CPF:</strong> ***.***.<span id="profileCpf"></span></p><p><strong>Telefone:</strong> <span id="profilePhone"></span></p><p><strong>Endereço:</strong> <span id="profileAddress"></span></p><p class="help">Solicite à administração a correção de dados cadastrais. Seus dados não são exibidos na área pública dos eventos.</p></div>
+ </section>
+</section>
+<footer style="text-align:center;color:#677b8b;font-size:12px;padding:0 15px 25px">Caixinha 2027 • Acesso restrito aos associados autorizados</footer>
+</main><script src="/caixinha-2027/associado.js" defer></script></body></html>
