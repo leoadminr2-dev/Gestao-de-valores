@@ -59,7 +59,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
   <div id="tab-submit" hidden><h2>Informar depósito</h2><p class="help">Informe a data e o valor do depósito, selecione uma ou mais finalidades e anexe o comprovante. Somente valores conferidos com o extrato serão reconhecidos.</p>
    <form id="receiptForm"><div class="grid2"><div><label for="paidOn">Data do depósito</label><input id="paidOn" type="date" min="2027-01-01" max="2027-12-31" required></div><div><label for="amount">Valor total (R$)</label><input id="amount" inputmode="decimal" placeholder="100,00" required></div></div>
    <div id="allocationList"></div><button type="button" class="secondary" id="addAllocation">+ Adicionar finalidade</button>
-   <label for="receiptFile">Comprovante JPG, PNG ou PDF (até 300 KB)</label><input id="receiptFile" type="file" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" required>
+   <label for="receiptFile">Comprovante JPG, PNG ou PDF (até 1 MB; fotos grandes serão reduzidas automaticamente)</label><input id="receiptFile" type="file" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" required>
    <label for="notes">Observação (opcional)</label><textarea id="notes" maxlength="800" placeholder="Ex.: pagamento da mensalidade de janeiro"></textarea>
    <div class="actions"><button id="sendReceipt" type="submit">Enviar comprovante</button></div></form>
   </div>
