@@ -1,0 +1,32 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Administração | Caixinha 2027</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:#112c43;font:15px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}
+header{background:#0e3149;color:white;padding:28px max(20px,calc((100vw - 1100px)/2))}
+header strong{font-size:16px;letter-spacing:2px;color:#a2efce}h1{font-size:30px;margin:4px 0}h2{margin-top:0}
+main{max-width:1100px;margin:22px auto;padding:0 16px}.card{background:white;padding:23px;border:1px solid #dfe8f0;border-radius:15px;margin:16px 0;box-shadow:0 5px 20px #19364909}
+.flex{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+button{background:#128570;color:#fff;border:0;border-radius:8px;padding:10px 14px;min-height:40px;font:inherit;font-weight:700;cursor:pointer}
+button:disabled{opacity:.4}.secondary{background:#eaf0f7;color:#1b3f54}.danger{background:#b74d50}
+label{display:block;font-weight:700;margin:11px 0 5px}input,textarea,select{width:100%;padding:10px;min-height:40px;border:1px solid #bbcbd9;border-radius:8px;font:inherit}
+textarea{min-height:75px}table{width:100%;border-collapse:collapse;min-width:700px}th,td{padding:11px 8px;border-bottom:1px solid #e4edf2;text-align:left;vertical-align:top}th{background:#f0f6f8}
+.scroller{overflow-x:auto}.muted,small{color:#526c7f}.note{background:#e9f6f1;padding:12px 15px;border-radius:9px;margin-bottom:12px}.note.bad{background:#ffe5e3;color:#933339}
+.status{display:inline-block;background:#fff0d2;padding:4px 7px;border-radius:6px}.approved{background:#dbf5e9}.rejected{background:#ffe1e1}
+.actions{display:flex;flex-wrap:wrap;gap:7px}.link{color:#086964;text-decoration:underline}
+@media(max-width:650px){.grid{grid-template-columns:1fr}h1{font-size:25px}.card{padding:16px}button{margin-bottom:3px}}
+</style></head><body><header><strong>CAIXINHA • 2027</strong><h1>Painel de Controle</h1><div>Cadastros, conciliação de depósitos, eventos e números escolhidos</div></header>
+<main><div id="message" class="note" role="status">Validando acesso dos responsáveis...</div>
+<div class="card flex"><p><strong>Área reservada aos administradores.</strong> O acesso utiliza a conta de responsável já autorizada na Gestão de Valores. Comprovantes só viram lançamentos após conferência.</p>
+<div class="actions"><a href="/" class="link">Abrir Gestão de Valores</a><button id="refresh" class="secondary">Atualizar registros</button></div></div>
+<div id="content" hidden>
+<div class="card"><h2>Cadastros dos associados</h2><p class="muted">Compare CPF, telefone e endereço com os dados conhecidos antes de autorizar. CPF exibido apenas parcialmente.</p>
+<div class="scroller"><table><thead><tr><th>Nome / CPF</th><th>Telefone / endereço</th><th>Cadastro</th><th>Ação</th></tr></thead><tbody id="members"></tbody></table></div></div>
+<div class="card"><h2>Comprovantes para conferência</h2><p class="muted">Confirme o crédito no extrato bancário antes de aprovar. A aprovação cria lançamentos únicos nas finalidades informadas.</p>
+<div class="scroller"><table><thead><tr><th>Associado</th><th>Depósito</th><th>Finalidades</th><th>Comprovante</th><th>Decisão</th></tr></thead><tbody id="receipts"></tbody></table></div></div>
+<div class="card"><h2>Eventos de 2027</h2><form id="eventForm">
+<div class="grid"><div><label for="eventTitle">Título do evento</label><input id="eventTitle" required minlength="5" maxlength="120" placeholder="Ex.: Encontro de Final de Ano 2027"></div>
+<div><label for="eventDate">Data do evento</label><input id="eventDate" type="date" min="2027-01-01" max="2027-12-31"></div></div>
+<div class="grid"><div><label for="eventTotal">Quantidade de números</label><input id="eventTotal" type="number" min="1" max="500" value="200" required></div>
+<div><label for="eventDescription">Descrição / prêmio</label><input id="eventDescription" maxlength="500" placeholder="Descrição do evento"></div></div>
+<div class="actions" style="margin-top:14px"><button type="submit">Criar evento</button></div></form>
+<h3>Eventos e números confirmados</h3><div class="scroller"><table><thead><tr><th>Evento</th><th>Estado</th><th>Escolhidos</th><th>Quem escolheu</th><th>Ação</th></tr></thead><tbody id="events"></tbody></table></div></div>
+</div></main><script src="/caixinha-2027/admin.js" defer></script></body></html>
