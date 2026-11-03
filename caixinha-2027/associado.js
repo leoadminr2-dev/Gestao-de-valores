@@ -20,7 +20,7 @@
   await api('login','POST',{cpf:$('loginCpf').value,password:$('loginPassword').value});$('loginPassword').value='';await load();
  }catch(err){tell(err.message,true);}finally{btn.disabled=false;}};
  $('logout').onclick=async()=>{try{await api('logout','POST',{});}catch{}data=null;$('app').style.display='none';$('loginArea').hidden=false;authMode('login');tell('Sessão encerrada.');};
- function tab(name){for(const b of document.querySelectorAll('[data-tab]'))b.classList.toggle('selected',b.dataset.tab===name);for(const x of ['payments','submit','events','profile'])$('tab-'+x).hidden=x!==name;}
+ function tab(name){for(const b of document.querySelectorAll('[data-tab]'))b.classList.toggle('selected',b.dataset.tab===name);for(const x of ['payments','submit','ledger','events','profile'])$('tab-'+x).hidden=x!==name;}
  $('tabs').onclick=e=>{const btn=e.target.closest('[data-tab]');if(btn)tab(btn.dataset.tab);};
  function allocRow(){
   const root=document.createElement('div');root.className='item allocation';root.innerHTML='<div class="grid2"><div><label>Finalidade</label><select class="cat">'+cats.map(c=>'<option>'+esc(c)+'</option>').join('')+'</select></div><div><label>Valor (R$)</label><input class="part" inputmode="decimal" placeholder="50,00" required></div></div><div class="grid2"><div><label>Mês de referência</label><input class="month" type="month" min="2027-01" max="2027-12"></div><div><label>Nome do evento (quando necessário)</label><input class="event" maxlength="90"></div></div><div class="actions"><button type="button" class="secondary remove">Remover esta finalidade</button></div>';
@@ -80,6 +80,10 @@
   $('approvedTotal').textContent=brl(data.approvedCents);
   $('pendingCount').textContent=rows.filter(x=>x.status==='pending').length;
   $('numbersCount').textContent=(data.numbers||[]).length;
+  const lines=data.ledger||[], sums=new Map();
+  for(const l of lines)sums.set(l.category,(sums.get(l.category)||0)+Number(l.amount_cents));
+  $('ledgerByCategory').innerHTML=[...sums.entries()].map(([name,c])=>'<div class="stat">'+esc(name)+'<strong>'+brl(c)+'</strong></div>').join('')||'<p class="muted">Nenhum depósito aprovado ainda.</p>';
+  $('ledgerRows').innerHTML=lines.map(l=>'<tr><td>'+esc(new Date(l.created_at).toLocaleDateString('pt-BR'))+'</td><td>'+esc(l.category)+'</td><td>'+esc(l.competence||l.event_name||'—')+'</td><td>'+brl(l.amount_cents)+'</td></tr>').join('')||'<tr><td colspan="4">Nenhum lançamento confirmado.</td></tr>';
  }
  $('receiptRows').onclick=e=>{
   const button=e.target.closest('[data-correct]');if(!button)return;
