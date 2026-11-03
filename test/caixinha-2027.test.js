@@ -31,3 +31,22 @@ test('comprovantes de 2026 são bloqueados para não misturar exercícios',()=>{
 test('valor inválido é rejeitado',()=>{
  assert.throws(()=>parseReceipt({paidOn:'2027-01-10',amountCents:-1,allocations:[{category:'Mensalidade',amountCents:-1}],fileType:'application/pdf'}),/Valor inválido|data válida/);
 });
+
+
+test('associado pode corrigir rateio rejeitado e manter arquivo original',()=>{
+ const data={paidOn:'2027-02-05',amountCents:10000,allocations:[
+  {category:'Mensalidade',amountCents:5000,competence:'2027-02'},
+  {category:'Rifa',amountCents:5000}
+ ],notes:'Ajuste de finalidade'};
+ const valid=parseReceipt(data,false,'2027-02-06');
+ assert.equal(valid.cents,10000);
+ assert.equal(valid.allocations.length,2);
+ assert.equal(valid.notes,'Ajuste de finalidade');
+ assert.equal(valid.bytes,undefined);
+});
+test('a correção recusa soma divergente, mês inválido e depósito futuro',()=>{
+ const base={paidOn:'2027-02-05',amountCents:5000,allocations:[{category:'Mensalidade',amountCents:5000,competence:'2027-02'}]};
+ assert.throws(()=>parseReceipt({...base,amountCents:6000},false,'2027-02-06'),/soma/);
+ assert.throws(()=>parseReceipt({...base,allocations:[{category:'Mensalidade',amountCents:5000,competence:'2026-12'}]},false,'2027-02-06'),/competência/);
+ assert.throws(()=>parseReceipt(base,false,'2027-02-04'),/data válida/);
+});
