@@ -22,7 +22,7 @@ Nova área do associado **isolada do exercício de 2026**. Não altera a base, o
 
 ## Instalação antes de ativar em produção
 
-1. Executar \`caixinha-2027/schema.sql\` em **banco privado autorizado**, após backup e revisão. O arquivo só cria tabelas \`cx27_*\` e não migra registros antigos. Ideal: ambiente Neon isolado/homologação.
+1. Executar \`caixinha-2027/schema.sql\` em **banco privado autorizado**, após backup e revisão. O arquivo só cria tabelas do esquema privado \`cx27\` e não migra registros antigos. Ideal: ambiente Neon isolado/homologação.
 2. Configurar no servidor **sem commitar segredos**:
    - \`PORTAL_DATABASE_URL\`: URL segura do Postgres (existente ou banco 2027 isolado).
    - \`ASSOCIATE27_PEPPER\`: segredo aleatório exclusivo com **pelo menos 32 caracteres**, armazenado em variável protegida. Não trocar sem plano de rotação: usado para identificação por CPF e derivação de senhas.
@@ -33,7 +33,7 @@ Nova área do associado **isolada do exercício de 2026**. Não altera a base, o
 
 ## Proteções e pendências para lançamento definitivo
 
-- CPF nunca é exibido por inteiro, nem devolvido pelo endpoint público; dados pessoais apenas em área autenticada. Os dados ficam no banco privado (nunca HTML, repositório ou planilha pública).
+- CPF nunca é exibido por inteiro, nem devolvido pelo endpoint público; dados pessoais apenas em área autenticada. Os dados ficam em esquema PostgreSQL privado, sem concessões de acesso público, no banco privado (nunca HTML, repositório ou planilha pública).
 - O cadastro **não** verifica automaticamente a posse do telefone. É obrigação do administrador confirmar identidade antes de aprovar. Recomendável evoluir para verificação independente e recuperação segura de senha.
 - O envio do comprovante **não** prova entrada no banco; o responsável deve conferir no extrato antes de clicar em Aprovar. Um depósito dividido entre finalidades deve ser conciliado.
 - Os valores aprovados representam **depósitos conferidos**, não lucro, saldo líquido nem disponibilidade para saque. Empréstimos, juros e distribuição final continuam na contabilidade dos responsáveis.
