@@ -81,7 +81,7 @@ async function member(req,res,respond) {
   const key=cookie(req);
   if(!key){respond(res,401,{error:'Entre no seu cadastro para continuar.'});return null;}
   const q=await database().query(
-    "SELECT m.id,m.full_name,m.cpf_last4,m.phone,m.address,m.status,s.expires_at FROM public.cx27_sessions s JOIN public.cx27_members m ON m.id=s.member_id WHERE s.token_hash=$1 AND s.expires_at>now() LIMIT 1",
+    "SELECT m.id,m.full_name,m.cpf_last4,m.phone,m.address,m.status,s.expires_at FROM cx27.sessions s JOIN cx27.members m ON m.id=s.member_id WHERE s.token_hash=$1 AND s.expires_at>now() LIMIT 1",
     [sha(key)]);
   if(!q.rowCount||q.rows[0].status!=='active'){respond(res,401,{error:'Sessão inválida ou cadastro aguardando aprovação.'});return null;}
   return q.rows[0];
@@ -104,7 +104,7 @@ function createCaixinha27Api({getAccess,bodyJson,respond,headers}) {
   async function route(req,res,url) {
     const p=url.pathname;
     if(p==='/api/2027/ready'&&req.method==='GET'){
-      try{await database().query('SELECT 1 FROM public.cx27_members LIMIT 1');respond(res,200,{ready:true});}
+      try{await database().query('SELECT 1 FROM cx27.members LIMIT 1');respond(res,200,{ready:true});}
       catch{respond(res,503,{ready:false});}
       return;
     }
@@ -119,22 +119,22 @@ function createCaixinha27Api({getAccess,bodyJson,respond,headers}) {
       if(address.length<12||address.length>240)throw fail('Informe endereço completo, com número e cidade.');
       if(pwd.length<10||pwd.length>128)throw fail('Crie uma senha de 10 a 128 caracteres.');
       const salt=randomBytes(16).toString('hex');
-      await database().query('INSERT INTO public.cx27_members (full_name,cpf_hmac,cpf_last4,phone,address,password_salt,password_hash) VALUES($1,$2,$3,$4,$5,$6,$7)',[name,cpfHmac(cpf),cpf.slice(-4),phone,address,salt,passHash(pwd,salt)]);
+      await database().query('INSERT INTO cx27.members (full_name,cpf_hmac,cpf_last4,phone,address,password_salt,password_hash) VALUES($1,$2,$3,$4,$5,$6,$7)',[name,cpfHmac(cpf),cpf.slice(-4),phone,address,salt,passHash(pwd,salt)]);
       respond(res,201,{success:true,message:'Cadastro recebido. O acesso será liberado após a conferência dos responsáveis.'});return;
     }
     if(p==='/api/2027/login'&&req.method==='POST'){
       rate(req,'login',12);const b=await bodyJson(req),cpf=cpfDigits(b.cpf),pwd=String(b.password||'');
       if(!cpf||pwd.length>128){respond(res,401,{error:'CPF ou senha inválidos.'});return;}
-      const q=await database().query('SELECT id,status,password_salt,password_hash FROM public.cx27_members WHERE cpf_hmac=$1 LIMIT 1',[cpfHmac(cpf)]);
+      const q=await database().query('SELECT id,status,password_salt,password_hash FROM cx27.members WHERE cpf_hmac=$1 LIMIT 1',[cpfHmac(cpf)]);
       const record=q.rows[0];
       if(!record||!safeEqual(passHash(pwd,record.password_salt),record.password_hash)){respond(res,401,{error:'CPF ou senha inválidos.'});return;}
       if(record.status!=='active'){respond(res,403,{error:record.status==='pending'?'Cadastro aguardando aprovação.':'Acesso suspenso. Contate os responsáveis.'});return;}
       const token=randomBytes(32).toString('base64url');
-      await database().query("INSERT INTO public.cx27_sessions (token_hash,member_id,expires_at) VALUES ($1,$2,now()+interval '14 days')",[sha(token),record.id]);
+      await database().query("INSERT INTO cx27.sessions (token_hash,member_id,expires_at) VALUES ($1,$2,now()+interval '14 days')",[sha(token),record.id]);
       setCookie(res,token,14);respond(res,200,{success:true});return;
     }
     if(p==='/api/2027/logout'&&req.method==='POST'){
-      const k=cookie(req);if(k)await database().query('DELETE FROM public.cx27_sessions WHERE token_hash=$1',[sha(k)]);
+      const k=cookie(req);if(k)await database().query('DELETE FROM cx27.sessions WHERE token_hash=$1',[sha(k)]);
       setCookie(res,'',0);respond(res,200,{success:true});return;
     }
     if(p.startsWith('/api/2027/admin/')){
@@ -142,18 +142,18 @@ function createCaixinha27Api({getAccess,bodyJson,respond,headers}) {
       const a=await admin(req,res);if(!a)return;
       if(p==='/api/2027/admin/dashboard'&&req.method==='GET'){
         const db=database(),[members,receipts,events,numbers]=await Promise.all([
-          db.query('SELECT id,full_name,cpf_last4,phone,address,status,created_at,approved_at FROM public.cx27_members ORDER BY created_at DESC LIMIT 500'),
-          db.query('SELECT r.id,r.member_id,m.full_name,r.paid_on,r.amount_cents,r.allocations,r.status,r.notes,r.review_notes,r.submitted_at,r.reviewed_by FROM public.cx27_receipts r JOIN public.cx27_members m ON m.id=r.member_id ORDER BY r.submitted_at DESC LIMIT 600'),
-          db.query('SELECT * FROM public.cx27_events ORDER BY created_at DESC LIMIT 80'),
-          db.query('SELECT n.event_id,n.number,n.member_id,m.full_name FROM public.cx27_event_numbers n JOIN public.cx27_members m ON m.id=n.member_id ORDER BY n.event_id,n.number LIMIT 10000')
+          db.query('SELECT id,full_name,cpf_last4,phone,address,status,created_at,approved_at FROM cx27.members ORDER BY created_at DESC LIMIT 500'),
+          db.query('SELECT r.id,r.member_id,m.full_name,r.paid_on,r.amount_cents,r.allocations,r.status,r.notes,r.review_notes,r.submitted_at,r.reviewed_by FROM cx27.receipts r JOIN cx27.members m ON m.id=r.member_id ORDER BY r.submitted_at DESC LIMIT 600'),
+          db.query('SELECT * FROM cx27.events ORDER BY created_at DESC LIMIT 80'),
+          db.query('SELECT n.event_id,n.number,n.member_id,m.full_name FROM cx27.event_numbers n JOIN cx27.members m ON m.id=n.member_id ORDER BY n.event_id,n.number LIMIT 10000')
         ]);
         respond(res,200,{members:members.rows,receipts:receipts.rows,events:events.rows,numbers:numbers.rows});return;
       }
       if(p==='/api/2027/admin/member'&&req.method==='POST'){
         const b=await bodyJson(req);
         if(!ID_RE.test(String(b.memberId||''))||!['active','blocked'].includes(b.status))throw fail('Dados inválidos.');
-        const q=await database().query('UPDATE public.cx27_members SET status=$2,approved_at=CASE WHEN $2=\'active\' THEN now() ELSE approved_at END,approved_by=$3 WHERE id=$1 RETURNING id,status',[b.memberId,b.status,a.email]);
-        if(b.status==='blocked')await database().query('DELETE FROM public.cx27_sessions WHERE member_id=$1',[b.memberId]);
+        const q=await database().query('UPDATE cx27.members SET status=$2,approved_at=CASE WHEN $2=\'active\' THEN now() ELSE approved_at END,approved_by=$3 WHERE id=$1 RETURNING id,status',[b.memberId,b.status,a.email]);
+        if(b.status==='blocked')await database().query('DELETE FROM cx27.sessions WHERE member_id=$1',[b.memberId]);
         respond(res,q.rowCount?200:404,{success:q.rowCount>0});return;
       }
       if(p==='/api/2027/admin/review'&&req.method==='POST'){
@@ -162,14 +162,14 @@ function createCaixinha27Api({getAccess,bodyJson,respond,headers}) {
         const client=await database().connect();
         try {
           await client.query('BEGIN');
-          const q=await client.query('SELECT id,member_id,allocations,status FROM public.cx27_receipts WHERE id=$1 FOR UPDATE',[id]);
+          const q=await client.query('SELECT id,member_id,allocations,status FROM cx27.receipts WHERE id=$1 FOR UPDATE',[id]);
           if(!q.rowCount||q.rows[0].status!=='pending')throw fail('Comprovante inexistente ou já conferido.',409);
           const r=q.rows[0];
           if(decision==='approved'){
-            for(const [i,line] of r.allocations.entries()) await client.query('INSERT INTO public.cx27_ledger (member_id,receipt_id,line_index,category,amount_cents,competence,event_name,approved_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+            for(const [i,line] of r.allocations.entries()) await client.query('INSERT INTO cx27.ledger (member_id,receipt_id,line_index,category,amount_cents,competence,event_name,approved_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
               [r.member_id,r.id,i,line.category,line.amountCents,line.competence,line.eventName,a.email]);
           }
-          await client.query('UPDATE public.cx27_receipts SET status=$2,review_notes=$3,reviewed_at=now(),reviewed_by=$4 WHERE id=$1',[id,decision,notes,a.email]);
+          await client.query('UPDATE cx27.receipts SET status=$2,review_notes=$3,reviewed_at=now(),reviewed_by=$4 WHERE id=$1',[id,decision,notes,a.email]);
           await client.query('COMMIT');
           respond(res,200,{success:true,status:decision,recorded:decision==='approved'});
         } catch(e){await client.query('ROLLBACK');throw e;}
@@ -179,7 +179,7 @@ function createCaixinha27Api({getAccess,bodyJson,respond,headers}) {
       if(p==='/api/2027/admin/receipt-file'&&req.method==='GET'){
         const id=String(url.searchParams.get('id')||'');
         if(!ID_RE.test(id))throw fail('Identificador inválido.');
-        const q=await database().query('SELECT mime,file_bytes FROM public.cx27_receipts WHERE id=$1',[id]);
+        const q=await database().query('SELECT mime,file_bytes FROM cx27.receipts WHERE id=$1',[id]);
         if(!q.rowCount){respond(res,404,{error:'Arquivo não encontrado.'});return;}
         headers(res,q.rows[0].mime);res.setHeader('Content-Disposition','attachment; filename="comprovante-2027-'+id+(q.rows[0].mime==='application/pdf'?'.pdf':q.rows[0].mime==='image/png'?'.png':'.jpg')+'"');
         res.writeHead(200);res.end(q.rows[0].file_bytes);return;
@@ -188,13 +188,13 @@ function createCaixinha27Api({getAccess,bodyJson,respond,headers}) {
         const b=await bodyJson(req),title=String(b.title||'').trim(),description=String(b.description||'').trim(),date=String(b.eventDate||'');
         const total=Number(b.totalNumbers);
         if(title.length<5||title.length>120||description.length>500||!Number.isInteger(total)||total<1||total>500||date&&!validDate(date))throw fail('Informe evento, data e quantidade de números válidos (1 a 500).');
-        const q=await database().query('INSERT INTO public.cx27_events (title,description,event_date,total_numbers) VALUES($1,$2,$3,$4) RETURNING id',[title,description,date||null,total]);
+        const q=await database().query('INSERT INTO cx27.events (title,description,event_date,total_numbers) VALUES($1,$2,$3,$4) RETURNING id',[title,description,date||null,total]);
         respond(res,201,{success:true,id:q.rows[0].id});return;
       }
       if(p==='/api/2027/admin/event-status'&&req.method==='POST'){
         const b=await bodyJson(req);
         if(!ID_RE.test(String(b.eventId||''))||!['open','closed'].includes(b.status))throw fail('Evento inválido.');
-        const q=await database().query('UPDATE public.cx27_events SET status=$2 WHERE id=$1 RETURNING id',[b.eventId,b.status]);
+        const q=await database().query('UPDATE cx27.events SET status=$2 WHERE id=$1 RETURNING id',[b.eventId,b.status]);
         respond(res,q.rowCount?200:404,{success:q.rowCount>0});return;
       }
       respond(res,404,{error:'Rota administrativa desconhecida.'});return;
@@ -203,23 +203,23 @@ function createCaixinha27Api({getAccess,bodyJson,respond,headers}) {
     if(p==='/api/2027/me'&&req.method==='GET'){
       const db=database();
       const [receipts,ledger,approved,events,numbers,occupied]=await Promise.all([
-        db.query('SELECT id,amount_cents,paid_on,allocations,status,review_notes,submitted_at FROM public.cx27_receipts WHERE member_id=$1 ORDER BY submitted_at DESC LIMIT 100',[m.id]),
-        db.query('SELECT category,amount_cents,competence,event_name,created_at FROM public.cx27_ledger WHERE member_id=$1 ORDER BY created_at DESC LIMIT 300',[m.id]),
-        db.query('SELECT coalesce(sum(amount_cents),0)::bigint AS total FROM public.cx27_ledger WHERE member_id=$1',[m.id]),
-        db.query('SELECT id,title,description,event_date,total_numbers,status FROM public.cx27_events ORDER BY created_at DESC LIMIT 50'),
-        db.query('SELECT event_id,number FROM public.cx27_event_numbers WHERE member_id=$1 ORDER BY number',[m.id]),
-        db.query('SELECT event_id,number FROM public.cx27_event_numbers')
+        db.query('SELECT id,amount_cents,paid_on,allocations,status,review_notes,submitted_at FROM cx27.receipts WHERE member_id=$1 ORDER BY submitted_at DESC LIMIT 100',[m.id]),
+        db.query('SELECT category,amount_cents,competence,event_name,created_at FROM cx27.ledger WHERE member_id=$1 ORDER BY created_at DESC LIMIT 300',[m.id]),
+        db.query('SELECT coalesce(sum(amount_cents),0)::bigint AS total FROM cx27.ledger WHERE member_id=$1',[m.id]),
+        db.query('SELECT id,title,description,event_date,total_numbers,status FROM cx27.events ORDER BY created_at DESC LIMIT 50'),
+        db.query('SELECT event_id,number FROM cx27.event_numbers WHERE member_id=$1 ORDER BY number',[m.id]),
+        db.query('SELECT event_id,number FROM cx27.event_numbers')
       ]);
       respond(res,200,{member:{name:m.full_name,cpfLast4:m.cpf_last4,phone:m.phone,address:m.address},receipts:receipts.rows,ledger:ledger.rows,approvedCents:approved.rows[0].total,events:events.rows,numbers:numbers.rows,occupied:occupied.rows});return;
     }
     if(p==='/api/2027/receipt'&&req.method==='POST'){
       rate(req,'receipt',10);const r=parseReceipt(await bodyJson(req));
       const db=database();
-      const count=await db.query("SELECT count(*)::integer AS total FROM public.cx27_receipts WHERE member_id=$1 AND submitted_at>now()-interval '30 days'",[m.id]);
+      const count=await db.query("SELECT count(*)::integer AS total FROM cx27.receipts WHERE member_id=$1 AND submitted_at>now()-interval '30 days'",[m.id]);
       if(Number(count.rows[0].total)>=40)throw fail('Limite de envios atingido neste mês. Contate os responsáveis.',429);
-      const size=await db.query("SELECT pg_total_relation_size('public.cx27_receipts')::bigint AS bytes");
+      const size=await db.query("SELECT pg_total_relation_size('cx27.receipts')::bigint AS bytes");
       if(Number(size.rows[0].bytes)>180*1024*1024)throw fail('Limite seguro de armazenamento atingido.',507);
-      const q=await db.query('INSERT INTO public.cx27_receipts (member_id,paid_on,amount_cents,allocations,notes,mime,filename,file_bytes,file_sha256) VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9) RETURNING id,status',
+      const q=await db.query('INSERT INTO cx27.receipts (member_id,paid_on,amount_cents,allocations,notes,mime,filename,file_bytes,file_sha256) VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9) RETURNING id,status',
         [m.id,r.paidOn,r.cents,JSON.stringify(r.allocations),r.notes,r.mime,r.fileName,r.bytes,r.fileHash]);
       respond(res,201,{success:true,id:q.rows[0].id,status:'pending',message:'Comprovante recebido para conferência. O saldo oficial ainda não mudou.'});return;
     }
@@ -230,10 +230,10 @@ function createCaixinha27Api({getAccess,bodyJson,respond,headers}) {
       const client=await database().connect();
       try{
         await client.query('BEGIN');
-        const ev=await client.query('SELECT id,total_numbers,status,event_date::text AS event_date FROM public.cx27_events WHERE id=$1 FOR UPDATE',[id]);
+        const ev=await client.query('SELECT id,total_numbers,status,event_date::text AS event_date FROM cx27.events WHERE id=$1 FOR UPDATE',[id]);
         if(!ev.rowCount||ev.rows[0].status!=='open'||ev.rows[0].event_date&&String(ev.rows[0].event_date).slice(0,10)<new Date().toISOString().slice(0,10))throw fail('Evento não disponível.',409);
         if(nums.some(n=>n>ev.rows[0].total_numbers))throw fail('Número fora da faixa deste evento.');
-        for(const n of nums)await client.query('INSERT INTO public.cx27_event_numbers (event_id,number,member_id) VALUES($1,$2,$3)',[id,n,m.id]);
+        for(const n of nums)await client.query('INSERT INTO cx27.event_numbers (event_id,number,member_id) VALUES($1,$2,$3)',[id,n,m.id]);
         await client.query('COMMIT');respond(res,201,{success:true,numbers:nums,message:'Números registrados para este associado.'});
       }catch(e){await client.query('ROLLBACK');if(e.code==='23505')throw fail('Um dos números acabou de ser escolhido. Atualize a lista.',409);throw e;}
       finally{client.release();}
