@@ -46,7 +46,7 @@
  function status(s){return s==='approved'?'<span class="tag ok">Aprovado</span>':s==='rejected'?'<span class="tag no">Correção solicitada</span>':'<span class="tag">Pendente</span>';}
  function payments(){
   const rows=data.receipts||[];$('receiptRows').innerHTML=rows.length?rows.map(r=>'<tr><td>'+esc(String(r.paid_on).slice(0,10))+'</td><td>'+brl(r.amount_cents)+'</td><td>'+esc((r.allocations||[]).map(x=>x.category).join(', '))+'</td><td>'+status(r.status)+(r.review_notes?'<small style="display:block">'+esc(r.review_notes)+'</small>':'')+'</td></tr>').join(''):'<tr><td colspan="4">Nenhum comprovante registrado ainda.</td></tr>';
-  $('approvedTotal').textContent=brl((data.ledger||[]).reduce((t,x)=>t+Number(x.amount_cents),0));
+  $('approvedTotal').textContent=brl(data.approvedCents);
   $('pendingCount').textContent=rows.filter(x=>x.status==='pending').length;
   $('numbersCount').textContent=(data.numbers||[]).length;
  }
