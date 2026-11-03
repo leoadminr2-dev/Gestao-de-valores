@@ -9,7 +9,7 @@ Nova área do associado **isolada do exercício de 2026**. Não altera a base, o
 - Sessão individual em cookie HttpOnly/Secure/SameSite e acesso segregado por associado.
 - Envio de comprovante JPG, PNG ou PDF até 1 MB, com compressão automática de fotos grandes no navegador, data de 2027, valor e múltiplas finalidades cujo total deve fechar.
 - Aprovação ou rejeição administrativa com observação; aprovação em transação cria as linhas financeiras uma só vez; rejeição não lança valores. O associado pode corrigir informações de comprovantes rejeitados, preservando o arquivo original para nova conferência.
-- Histórico individual dos comprovantes, lançamentos aprovados, dados cadastrais e eventos.
+- Histórico individual dos comprovantes, extrato de lançamentos aprovados por finalidade, dados cadastrais e eventos.
 - Criação de eventos pela administração e seleção de números de 001 até o limite configurado (até 500). Índice único no banco impede dupla reserva concorrente.
 - Painel administrativo relaciona nome, CPF parcial, telefone/endereço, comprovantes e números escolhidos por pessoa.
 - Atalho para a **plataforma de eventos 2026 no Wix**. O evento de 2026 continua independente e não é importado ou alterado.
