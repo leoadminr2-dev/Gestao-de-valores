@@ -2,7 +2,7 @@
 // Central do Associado 2027: isolada do aplicativo e dos registros de 2026.
 const { Pool } = require('pg');
 const { randomBytes, createHash, createHmac, scryptSync, timingSafeEqual } = require('node:crypto');
-const MAX_BYTES = 300 * 1024;
+const MAX_BYTES = 1024 * 1024;
 const CATEGORIES = new Set(['Mensalidade','Juros de mensalidade','Rifa','Evento','Pagamento de empréstimo','Juros de empréstimo','Outros']);
 const ID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const DATE_RE = /^2027-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -65,9 +65,9 @@ function parseReceipt(b) {
   });
   if(sum!==cents)throw fail('A soma das finalidades deve corresponder exatamente ao depósito.');
   const mime=String(b.fileType||''), base64=String(b.fileBase64||'');
-  if(base64.length>Math.ceil(MAX_BYTES*4/3)+10||!base64||!/^[A-Za-z0-9+/]+={0,2}$/.test(base64))throw fail('Arquivo inválido ou maior que 300 KB.',413);
+  if(base64.length>Math.ceil(MAX_BYTES*4/3)+10||!base64||!/^[A-Za-z0-9+/]+={0,2}$/.test(base64))throw fail('Arquivo inválido ou maior que 1 MB.',413);
   const bytes=Buffer.from(base64,'base64');
-  if(bytes.length<50||bytes.length>MAX_BYTES||!fileOk(bytes,mime))throw fail('Use JPG, PNG ou PDF verdadeiro com até 300 KB.');
+  if(bytes.length<50||bytes.length>MAX_BYTES||!fileOk(bytes,mime))throw fail('Use JPG, PNG ou PDF verdadeiro com até 1 MB.');
   return {paidOn,cents,allocations,mime,bytes,fileHash:sha(bytes),fileName:String(b.fileName||'comprovante').replace(/[^a-zA-Z0-9._-]/g,'_').slice(0,80),notes:String(b.notes||'').trim().slice(0,800)};
 }
 function cookie(req) {
