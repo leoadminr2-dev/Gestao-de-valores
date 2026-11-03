@@ -49,7 +49,7 @@ function validDate(s) {
   const d=new Date(s+'T12:00:00Z');
   return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===s;
 }
-function parseReceipt(b) {
+function parseReceipt(b, requireFile = true) {
   const paidOn=String(b.paidOn||''), cents=Number(b.amountCents);
   if(!validDate(paidOn)||paidOn>new Date().toISOString().slice(0,10)) throw fail('Informe a data válida do pagamento de 2027.');
   if(!Number.isSafeInteger(cents)||cents<1||cents>20000000)throw fail('Valor inválido.');
@@ -64,6 +64,7 @@ function parseReceipt(b) {
     return {category,amountCents:part,competence:MONTH_RE.test(competence)?competence:null,eventName:category==='Evento'?eventName:null};
   });
   if(sum!==cents)throw fail('A soma das finalidades deve corresponder exatamente ao depósito.');
+  if(!requireFile) return {paidOn,cents,allocations,notes:String(b.notes||'').trim().slice(0,800)};
   const mime=String(b.fileType||''), base64=String(b.fileBase64||'');
   if(base64.length>Math.ceil(MAX_BYTES*4/3)+10||!base64||!/^[A-Za-z0-9+/]+={0,2}$/.test(base64))throw fail('Arquivo inválido ou maior que 1 MB.',413);
   const bytes=Buffer.from(base64,'base64');
@@ -211,6 +212,17 @@ function createCaixinha27Api({getAccess,bodyJson,respond,headers}) {
         db.query('SELECT event_id,number FROM cx27.event_numbers')
       ]);
       respond(res,200,{member:{name:m.full_name,cpfLast4:m.cpf_last4,phone:m.phone,address:m.address},receipts:receipts.rows,ledger:ledger.rows,approvedCents:approved.rows[0].total,events:events.rows,numbers:numbers.rows,occupied:occupied.rows});return;
+    }
+    if(p==='/api/2027/receipt/correct'&&req.method==='POST'){
+      rate(req,'receipt-correct',10);
+      const b=await bodyJson(req), id=String(b.receiptId||'');
+      if(!ID_RE.test(id))throw fail('Comprovante inválido.');
+      const r=parseReceipt(b,false);
+      const q=await database().query(
+        "UPDATE cx27.receipts SET paid_on=$3,amount_cents=$4,allocations=$5::jsonb,notes=$6,status='pending',review_notes=NULL,reviewed_by=NULL,reviewed_at=NULL WHERE id=$1 AND member_id=$2 AND status='rejected' RETURNING id",
+        [id,m.id,r.paidOn,r.cents,JSON.stringify(r.allocations),r.notes]);
+      if(!q.rowCount){respond(res,409,{error:'Somente comprovantes rejeitados podem ser corrigidos pelo titular.'});return;}
+      respond(res,200,{success:true,status:'pending',message:'Correção recebida. O comprovante original foi mantido para nova conferência.'});return;
     }
     if(p==='/api/2027/receipt'&&req.method==='POST'){
       rate(req,'receipt',10);const r=parseReceipt(await bodyJson(req));
