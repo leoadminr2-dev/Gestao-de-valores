@@ -20,14 +20,14 @@ export const MENU = [
   "4️⃣ *Agendamento e acompanhamento*",
   "Solicitações e protocolos",
   "",
-  "5️⃣ *Falar com Leonardo*",
-  "Atendimento humano",
+  "5️⃣ *Falar com Leonardo Moreira*",
+  "Técnico responsável pela manutenção",
   "",
   "💬 Digite o número ou conte o que precisa."
 ].join("\n");
 
 export const norm = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-const HUMAN_REPLY = "Claro! 💬 Vou deixar a conversa com Leonardo, que responderá assim que possível. Você não precisa repetir as informações que já enviou.\n\nSe quiser voltar ao atendimento automático, escreva *MENU*.";
+const HUMAN_REPLY = "👨‍🔧 Você será direcionado para falar com *Leonardo Moreira*, técnico responsável pela manutenção.\n\nPor favor, descreva brevemente sua necessidade. Assim, poderemos dar continuidade ao seu atendimento com mais agilidade.\n\nPara voltar ao atendimento automático, digite *MENU*.";
 const RESIDENTIAL_MENU = "🏠 *Atendimento residencial*\n\n1️⃣ *Instalação de ar-condicionado*\n\n2️⃣ *Manutenção e consertos*\n\n3️⃣ *Limpeza profunda*\n\nResponda com o número ou conte seu problema.\nDigite *0* para voltar.";
 const BUSINESS_MENU = "🏢 *Atendimento para empresas*\n\n1️⃣ *Manutenção e consertos*\n\n2️⃣ *Limpeza profunda*\n\n3️⃣ *Contrato preventivo e periódico*\n\nResponda com o número ou descreva sua necessidade.\nDigite *0* para voltar.";
 const MARKET_MENU = "♻️ *Compra e venda de equipamentos*\n\n1️⃣ *Quero comprar*\n\n2️⃣ *Quero vender*\n\nGeladeiras, ar-condicionado e máquinas de lavar. Disponibilidade e condições serão confirmadas por Leonardo.\nDigite *0* para voltar.";
