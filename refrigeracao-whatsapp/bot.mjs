@@ -55,20 +55,21 @@ function route(raw, previous={}) {
   return null;
 }
 function initialIntent(t, previous={}) {
-  if(t==="1" || /instalac|instalar/.test(t))return orderFlow("Instalação de ar-condicionado",previous);
-  if(t==="2" || /(manutencao|consert|reparo|defeito|nao gela|nao liga|nao centrifuga|parou de funcionar|geladeira|freezer|maquina de lavar|lavadora)/.test(t))
-    return orderFlow("Manutenção e consertos",previous);
-  if(t==="3" || /limpeza|higieniz/.test(t))return orderFlow("Limpeza profunda e higienização",previous);
-  if(t==="4" || /residencial|minha casa|apartamento/.test(t))
-    return {stage:"residencial",mode:"bot",data:{...previous,tipoAtendimento:"Residencial"},reply:RESIDENTIAL_MENU};
-  if(t==="5" || /empresarial|para empresa|comercio|escritorio/.test(t))
-    return {stage:"empresa_escolha",mode:"bot",data:{...previous,tipoAtendimento:"Empresarial"},reply:BUSINESS_MENU};
+  // As intenções específicas vêm antes de palavras genéricas como limpeza/manutenção.
   if(t==="6" || /contrato|preventiva|periodic/.test(t))
     return orderFlow("Contrato de manutenção e limpeza",previous,{tipoAtendimento:"Empresarial"});
+  if(t==="5" || /empresarial|para empresa|comercio|escritorio/.test(t))
+    return {stage:"empresa_escolha",mode:"bot",data:{...previous,tipoAtendimento:"Empresarial"},reply:BUSINESS_MENU};
+  if(t==="4" || /residencial|minha casa|apartamento/.test(t))
+    return {stage:"residencial",mode:"bot",data:{...previous,tipoAtendimento:"Residencial"},reply:RESIDENTIAL_MENU};
   if(t==="7" || /compra e venda|comprar|vender|quero comprar|quero vender/.test(t))
     return {stage:"mercado",mode:"bot",data:{...previous},reply:MARKET_MENU};
   if(t==="8" || /acompanhar|protocolo|andamento do pedido/.test(t))
     return {stage:"protocolo",mode:"bot",data:{...previous},reply:"🧾 Posso ajudar a encaminhar sua consulta. Envie o número do protocolo da solicitação. Se não tiver, informe seu nome e bairro. Leonardo verificará o andamento; não vou informar um status sem conferência."};
+  if(t==="1" || /instalac|instalar/.test(t))return orderFlow("Instalação de ar-condicionado",previous);
+  if(t==="2" || /(manutencao|consert|reparo|defeito|nao gela|nao liga|nao centrifuga|parou de funcionar|geladeira|freezer|maquina de lavar|lavadora)/.test(t))
+    return orderFlow("Manutenção e consertos",previous);
+  if(t==="3" || /limpeza|higieniz/.test(t))return orderFlow("Limpeza profunda e higienização",previous);
   if(/ar condicionado|split|modelo de janela/.test(t))
     return {stage:"ar_escolha",mode:"bot",data:{...previous},reply:AIR_MENU};
   return null;
