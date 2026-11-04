@@ -271,5 +271,6 @@ document.addEventListener("DOMContentLoaded",()=>{
  });
  el("replyKind").addEventListener("change",clearReplyPreview);
  el("customerExtra").addEventListener("input",clearReplyPreview);
+ ["editStatus","editDate","editAmount"].forEach(id=>el(id).addEventListener("change",clearReplyPreview));
  void init();
 });
