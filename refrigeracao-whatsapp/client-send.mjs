@@ -58,15 +58,18 @@ export function createCustomerReplyService(pool,options={}){
    try{
     const providerId=await outbound(phone,message);
     await pool.query("UPDATE wa_customer_replies SET status='accepted',provider_message_id=$2,updated_at=now() WHERE id=$1",[claimed.rows[0].id,providerId||null]);
-    // Owner initiated an explicit follow-up: preserve human control, never let bot answer an acceptance.
-    await pool.query("INSERT INTO wa_sessions(phone,mode) VALUES($1,'human') ON CONFLICT(phone) DO UPDATE SET mode='human',updated_at=now()",[phone]);
-    await pool.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE phone=$1 AND sent_at IS NULL AND cancelled_at IS NULL",[phone]);
+    // Owner initiated an explicit follow-up: preserve human control.
+    // A failure to pause the bot must not misreport a provider-accepted message as undelivered.
+    try{
+     await pool.query("INSERT INTO wa_sessions(phone,mode) VALUES($1,'human') ON CONFLICT(phone) DO UPDATE SET mode='human',updated_at=now()",[phone]);
+     await pool.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE phone=$1 AND sent_at IS NULL AND cancelled_at IS NULL",[phone]);
+    }catch(e){console.error("FALHA_TRANSFERENCIA_HUMANA",String(e?.code||"ERR").slice(0,48));}
     return {status:"accepted",repeated:false};
    }catch(e){
     // Timeout and network failures are ambiguous; an HTTP rejection is known.
     const failed=String(e?.message||"").startsWith("provedor_rejeitou_");
     await pool.query("UPDATE wa_customer_replies SET status=$2,error_code=$3,updated_at=now() WHERE id=$1",[claimed.rows[0].id,failed?"rejected":"unknown",String(e?.message||"erro_envio").slice(0,70)]);
-    throw err(failed?"provedor_rejeitou_mensagem":"envio_incertro_nao_repetir",502);
+    throw err(failed?"provedor_rejeitou_mensagem":"envio_incerto_nao_repetir",502);
    }
   },
   async history(protocol){
