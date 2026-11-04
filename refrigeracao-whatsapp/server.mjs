@@ -247,6 +247,13 @@ const server=http.createServer(async(req,res)=>{
    if(!event)return json(res,200,{ok:true,ignored:true});
    // Before final controlled validation, never process or store customer messages.
    if(!ycloudReady)return json(res,200,{ok:true,paused:true});
+   if(YCLOUD_TEST_MODE){
+    const testCommand=event.kind==="incoming" && event.messageType==="text" && String(event.text||"").trim().toUpperCase()==="TESTE LMR";
+    if(!testCommand){
+     const allowed=await pool.query("SELECT 1 FROM wa_test_allowlist WHERE phone=$1",[event.phone]);
+     if(!allowed.rowCount)return json(res,200,{ok:true,test_mode:true,ignored:true});
+    }
+   }
    const isNew=await receiveYCloudEvent(event);
    json(res,200,{ok:true,queued:isNew});
    if(isNew)setImmediate(()=>{void tick()});
