@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B2130">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title>Central de Operações | Leonardo Moreira Refrigeração</title>
+<link rel="stylesheet" href="/painel/dashboard.css">
+<script defer src="/painel/dashboard.js"></script>
+</head>
+<body>
+<div class="login-layout" id="loginView">
+ <div class="login-art"><div class="art-grid"></div><span class="snowflake">❄</span><div class="art-copy"><span class="overline">LEONARDO MOREIRA REFRIGERAÇÃO</span><h2>O controle da sua operação, em um só lugar.</h2><p>Atendimentos, serviços e oportunidades com mais organização.</p></div></div>
+ <main class="login-card">
+  <div class="brandline"><span class="mark">❄</span><span><strong>LEONARDO MOREIRA</strong><small>REFRIGERAÇÃO</small></span></div>
+  <span class="overline cool">ACESSO EXCLUSIVO</span><h1>Bem-vindo à central.</h1><p class="subtle">Entre com sua senha administrativa para acessar os dados de atendimento.</p>
+  <form id="loginForm"><label for="password">Senha de acesso</label><div class="input-wrap"><input type="password" name="password" id="password" autocomplete="current-password" placeholder="Digite sua senha" required minlength="8"><button type="button" class="reveal" id="togglePassword" aria-label="Mostrar ou ocultar senha">Mostrar</button></div><p class="error" id="loginError" role="alert" hidden></p><button class="primary full" id="loginButton" type="submit">Acessar central <span aria-hidden="true">→</span></button></form>
+  <a class="back-link" href="https://headless-qqhigtkprnz-leoadminr2-140a.wix-site-host.com/">← Voltar ao site</a>
+  <div class="login-footer"><span class="safe-icon">⌁</span> Área protegida · Seus dados não são exibidos publicamente</div>
+ </main>
+</div>
+<div class="app" id="appView" hidden>
+ <aside class="sidebar">
+   <a class="side-brand" href="/painel"><span class="mark">❄</span><span><strong>LEONARDO MOREIRA</strong><small>REFRIGERAÇÃO</small></span></a>
+   <div class="side-label">GERENCIAMENTO</div>
+   <nav class="side-nav" aria-label="Navegação da central">
+     <button class="nav-btn active" id="navOverview"><span class="nav-icon">▦</span> Visão geral</button>
+     <button class="nav-btn" id="navOrders"><span class="nav-icon">▤</span> Ordens de serviço</button>
+     <button class="nav-btn" id="navCalendar"><span class="nav-icon">▢</span> Agenda</button>
+     <button class="nav-btn" id="navQuotes"><span class="nav-icon">◇</span> Orçamentos</button>
+   </nav>
+   <div class="side-label extra">FERRAMENTAS</div>
+   <nav class="side-nav" aria-label="Ferramentas administrativas">
+     <a class="nav-btn" href="https://manage.wix.com/dashboard/d2d0f777-958d-42e5-a68e-9a1b6807d9ab/wix-cms/data/OrdensRefrigeracao" target="_blank" rel="noopener noreferrer"><span class="nav-icon">↗</span> CMS Wix <span class="external">↗</span></a>
+     <a class="nav-btn" href="https://headless-qqhigtkprnz-leoadminr2-140a.wix-site-host.com/orcamento.html" target="_blank" rel="noopener noreferrer"><span class="nav-icon">▧</span> Gerar orçamento <span class="external">↗</span></a>
+     <a class="nav-btn" href="https://headless-qqhigtkprnz-leoadminr2-140a.wix-site-host.com/" target="_blank" rel="noopener noreferrer"><span class="nav-icon">◉</span> Site público <span class="external">↗</span></a>
+   </nav>
+   <div class="sidebar-bottom"><div class="system-dot"></div><div><strong>Central conectada</strong><small>WhatsApp · Neon · Wix</small></div></div>
+ </aside>
+ <div class="app-main">
+  <header class="topbar">
+   <div><div class="breadcrumb">Operações <span>/</span> <b id="sectionName">Visão geral</b></div><span class="top-date" id="todayText"></span></div>
+   <div class="top-actions"><button type="button" class="small-btn" id="refreshBtn"><span>↻</span> Atualizar</button><div class="owner-chip"><div class="owner-avatar">LM</div><span>Administrador</span></div><button type="button" class="small-btn logout" id="logoutBtn">Sair</button></div>
+  </header>
+  <main class="content">
+    <div class="welcome"><div><div class="eyebrow"><span class="tiny-dot"></span> CENTRAL DE OPERAÇÕES</div><h1>Bom trabalho, Leonardo<span class="wave">.</span></h1><p>Gerencie seus atendimentos com clareza, do primeiro contato à conclusão do serviço.</p></div><div class="welcome-action"><span id="lastUpdate">Atualizando dados...</span><button class="primary" id="openAllOrders">Ver ordens de serviço <span>↗</span></button></div></div>
+    <section class="stat-grid" aria-label="Indicadores">
+      <button class="stat-card selected" data-filter="todos"><span class="stat-top"><span class="stat-title">Total de solicitações</span><span class="stat-icon blue">▣</span></span><strong id="metricTotal">—</strong><span class="stat-foot"><span class="stat-mini">Todas</span> as ordens WhatsApp</span></button>
+      <button class="stat-card" data-filter="novo"><span class="stat-top"><span class="stat-title">Novos pedidos</span><span class="stat-icon purple">✳</span></span><strong id="metricNew">—</strong><span class="stat-foot"><span class="stat-mini">Aguardando</span> análise inicial</span></button>
+      <button class="stat-card" data-filter="orcamento"><span class="stat-top"><span class="stat-title">Orçamentos pendentes</span><span class="stat-icon orange">▧</span></span><strong id="metricQuotes">—</strong><span class="stat-foot"><span class="stat-mini">Aguardando</span> proposta ou retorno</span></button>
+      <button class="stat-card" data-filter="agendado"><span class="stat-top"><span class="stat-title">Agendados</span><span class="stat-icon cyan">▢</span></span><strong id="metricScheduled">—</strong><span class="stat-foot"><span class="stat-mini">Visitas</span> a realizar</span></button>
+      <button class="stat-card" data-filter="andamento"><span class="stat-top"><span class="stat-title">Em andamento</span><span class="stat-icon teal">⚙</span></span><strong id="metricProgress">—</strong><span class="stat-foot"><span class="stat-mini">Serviços</span> iniciados</span></button>
+      <button class="stat-card" data-filter="concluido"><span class="stat-top"><span class="stat-title">Concluídos</span><span class="stat-icon green">✓</span></span><strong id="metricDone">—</strong><span class="stat-foot"><span class="stat-mini">Serviços</span> finalizados</span></button>
+    </section>
+    <section class="workbench" id="ordersSection">
+     <div class="panel-heading"><div><div class="eyebrow dark">ACOMPANHAMENTO</div><h2 id="ordersTitle">Ordens de serviço</h2><p class="subtle">Selecione um pedido para atualizar sua situação, orçamento ou agendamento.</p></div><div class="panel-tools"><label class="searchbox" for="searchInput"><span>⌕</span><input id="searchInput" type="search" placeholder="Buscar pedido, cliente, bairro..." autocomplete="off"></label><select id="statusFilter" aria-label="Filtrar por status"><option value="todos">Todos os status</option><option value="novo">Novos pedidos</option><option value="orcamento">Orçamento pendente</option><option value="agendado">Agendados</option><option value="andamento">Em andamento</option><option value="concluido">Concluídos</option><option value="cancelado">Cancelados</option></select></div></div>
+     <div class="work-grid"><div class="orders-pane"><div class="list-meta"><span id="listCount">Carregando ordens...</span><span>Mais recentes primeiro</span></div><div id="ordersList" class="orders-list" aria-live="polite"></div><div class="source-note">Os registros exibidos nesta lista são pedidos recebidos pelo WhatsApp e armazenados no Neon. Pedidos enviados diretamente pelos formulários do site continuam disponíveis no painel Wix.</div></div>
+     <div class="detail-pane"><div id="detailEmpty" class="detail-empty"><div class="detail-empty-icon">▤</div><h3>Selecione uma ordem</h3><p>As informações e ações de gerenciamento aparecerão aqui.</p></div>
+       <div id="detailContent" hidden>
+        <div class="detail-header"><div><div class="eyebrow dark">DETALHES DO ATENDIMENTO</div><h3 id="detailName"></h3><p id="detailProtocol"></p></div><span id="detailBadge"></span></div>
+        <div class="details-grid"><div><span>Serviço</span><strong id="detailService"></strong></div><div><span>Equipamento</span><strong id="detailEquipment"></strong></div><div><span>Bairro</span><strong id="detailDistrict"></strong></div><div><span>Preferência do cliente</span><strong id="detailPreference"></strong></div><div><span>Recebido em</span><strong id="detailCreated"></strong></div><div><span>Sincronização</span><strong id="detailSync"></strong></div></div>
+        <a class="wa-link" id="detailWhatsApp" href="#" target="_blank" rel="noopener noreferrer">☏ Conversar pelo WhatsApp <span>↗</span></a>
+        <form id="orderForm"><div class="form-heading">Atualizar acompanhamento</div><label for="editStatus">Etapa do serviço</label><select id="editStatus" required><option value="novo">Novo pedido</option><option value="orcamento">Orçamento pendente</option><option value="agendado">Agendado</option><option value="andamento">Em andamento</option><option value="concluido">Concluído</option><option value="cancelado">Cancelado</option></select><div class="form-pair"><div><label for="editDate">Data da visita</label><input id="editDate" type="datetime-local"></div><div><label for="editAmount">Orçamento (R$)</label><input id="editAmount" type="number" min="0" max="999999.99" step="0.01" placeholder="0,00"></div></div><label for="editNotes">Observações internas</label><textarea id="editNotes" rows="3" maxlength="1500" placeholder="Detalhes para acompanhar esta ordem..."></textarea><div class="form-feedback" id="saveStatus" role="status"></div><button class="primary full" type="submit" id="saveOrder">Salvar alterações <span>✓</span></button><p class="edit-note">As atualizações de acompanhamento ficam salvas nesta central. A cópia original da solicitação no CMS Wix permanece preservada.</p></form>
+       </div>
+     </div></div>
+    </section>
+    <div class="bottom-shortcuts"><a href="https://headless-qqhigtkprnz-leoadminr2-140a.wix-site-host.com/orcamento.html" target="_blank" rel="noopener noreferrer"><span class="shortcut-icon">▧</span><span><strong>Preparar orçamento</strong><small>Montar proposta e gerar PDF</small></span><span>↗</span></a><a href="https://manage.wix.com/dashboard/d2d0f777-958d-42e5-a68e-9a1b6807d9ab/wix-cms/data/OrdensRefrigeracao" target="_blank" rel="noopener noreferrer"><span class="shortcut-icon">▤</span><span><strong>Pedidos do site</strong><small>Consultar CMS e formulários Wix</small></span><span>↗</span></a></div>
+    <footer class="app-footer">Leonardo Moreira Refrigeração · Central de Operações <span>Atendimento profissional, organizado e humano.</span></footer>
+  </main>
+ </div>
+</div>
+</body>
+</html>
