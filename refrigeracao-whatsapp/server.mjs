@@ -16,6 +16,8 @@ const YCLOUD_WEBHOOK_SECRET=process.env.YCLOUD_WEBHOOK_SECRET||"";
 const YCLOUD_API_KEY=process.env.YCLOUD_API_KEY||"";
 const YCLOUD_SENDER_NUMBER=process.env.YCLOUD_SENDER_NUMBER||"";
 const YCLOUD_AUTOREPLY_ENABLED=process.env.YCLOUD_AUTOREPLY_ENABLED==="true";
+// Guardrail: real customers remain unaffected until explicit production release.
+const YCLOUD_TEST_MODE=process.env.YCLOUD_TEST_MODE!=="false";
 const PORT=Number(process.env.PORT||3000);
 const pool=new pg.Pool({connectionString:DB_URL,max:4,idleTimeoutMillis:10000,connectionTimeoutMillis:10000});
 const metaReady=Boolean(APP_SECRET&&VERIFY_TOKEN&&ACCESS_TOKEN&&PHONE_NUMBER_ID);
@@ -103,6 +105,19 @@ async function processYCloudEvents(){
   if(!claim.rowCount)break;
   const event=claim.rows[0].payload;
   try{
+   if(YCLOUD_TEST_MODE){
+    const optedIn=event.kind==="incoming" && event.messageType==="text" && String(event.text||"").trim().toUpperCase()==="TESTE LMR";
+    if(optedIn){
+     await pool.query("INSERT INTO wa_test_allowlist(phone) VALUES($1) ON CONFLICT DO NOTHING",[event.phone]);
+     event.text="menu";
+    }else{
+     const allowed=await pool.query("SELECT 1 FROM wa_test_allowlist WHERE phone=$1",[event.phone]);
+     if(!allowed.rowCount){
+      await pool.query("UPDATE wa_provider_events SET processed_at=now(),lease_until=NULL,last_error=NULL WHERE event_id=$1",[claim.rows[0].event_id]);
+      continue;
+     }
+    }
+   }
    if(event.kind==="manual_reply"){await handleManualReply(event.phone);}
    else if(event.kind==="incoming"){
     await handleInbound({from:event.phone,id:"ycloud-"+event.messageId,type:event.messageType,text:{body:event.text||""}});
@@ -219,7 +234,7 @@ const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url||"/","http://localhost");
   if(req.method==="GET"&&url.pathname==="/healthz"){
-   return json(res,200,{service:"leonardo-refrigeracao-whatsapp",status:metaReady?"configured":"awaiting_meta_onboarding",database:DB_URL?"configured":"missing",wix:WIX_CLIENT_ID?"configured":"missing",graphApi:API_VERSION,yCloud:ycloudReady?"enabled":YCLOUD_WEBHOOK_SECRET?"paused":"awaiting_webhook_secret"});
+   return json(res,200,{service:"leonardo-refrigeracao-whatsapp",status:metaReady?"configured":"awaiting_meta_onboarding",database:DB_URL?"configured":"missing",wix:WIX_CLIENT_ID?"configured":"missing",graphApi:API_VERSION,yCloud:ycloudReady?(YCLOUD_TEST_MODE?"test_mode":"enabled"):YCLOUD_WEBHOOK_SECRET?"paused":"awaiting_webhook_secret"});
   }
   if(url.pathname==="/webhook/ycloud"){
    if(req.method==="GET")return json(res,200,{service:"leonardo-refrigeracao-whatsapp",provider:"ycloud",state:ycloudReady?"ready":"paused"});
