@@ -1,50 +1,60 @@
-# Leonardo Moreira Refrigeração — WhatsApp (API oficial)
+# Leonardo Moreira Refrigeração — WhatsApp Business + YCloud
 
-Este módulo fica isolado na branch refrigeracao-whatsapp-api.
-Site de atendimento: https://headless-qqhigtkprnz-leoadminr2-140a.wix-site-host.com/
-Serviço Render: https://leonardo-refrigeracao-whatsapp.onrender.com
-Painel de infraestrutura: https://dashboard.render.com/web/srv-dblasi2jnfac73fej100
+## Estado
+O número comercial +55 21 97033-8222 aparece como Connected no painel YCloud (confirmado por captura do titular em 04/11/2026).
+O bot está preparado no Render, mas **respostas automáticas permanecem desativadas** até validação do webhook, dos segredos e dos custos. O código não altera o site Wix.
 
-## Situação atual
-O código e as tabelas foram implantados. A integração com a Meta permanece DESATIVADA até que o titular conclua o cadastro oficial e configure as credenciais protegidas no Render. O WhatsApp existente e o site Wix continuam inalterados.
+- Serviço: https://leonardo-refrigeracao-whatsapp.onrender.com
+- Saúde: https://leonardo-refrigeracao-whatsapp.onrender.com/healthz
+- Render: https://dashboard.render.com/web/srv-dblasi2jnfac73fej100
+- Wix: https://headless-qqhigtkprnz-leoadminr2-140a.wix-site-host.com
+- Coleção Wix (privada): OrdensRefrigeracao
 
-## Recursos implementados
-- Endpoint GET /healthz para leitura do estado de conexão (não retorna segredos).
-- Webhook GET /webhook/whatsapp para validação do desafio da Meta.
-- Webhook POST /webhook/whatsapp, que exige assinatura HMAC-SHA256 válida sobre o corpo bruto.
-- Mensagens duplicadas não geram pedidos duplicados; estado de conversa e filas persistem no Neon.
-- Conversa guiada: selecionar serviço, nome, bairro, equipamento, período, revisar e confirmar consentimento.
-- Os preços estimados aparecem apenas mediante consulta do cliente.
-- A opção 5 transfere para o atendimento humano; MENU reativa o bot.
-- Somente pedidos confirmados pelo cliente são enviados à coleção privada OrdensRefrigeracao no Wix.
-- A preferência de agendamento nunca é tratada como horário confirmado.
+## Integração YCloud
+Webhook a registrar em YCloud > Developer > Webhooks > Add Endpoints:
 
-## Credenciais necessárias no Render > Environment
-- WHATSAPP_VERIFY_TOKEN: valor gerado e já armazenado no Render. Copiar exatamente para o cadastro de webhook da Meta.
-- WHATSAPP_APP_SECRET: segredo da aplicação Meta (NÃO compartilhar por chat).
-- WHATSAPP_ACCESS_TOKEN: token de produção com acesso à conta oficial.
-- WHATSAPP_PHONE_NUMBER_ID: identificador da linha vinculada na Cloud API.
-- GRAPH_API_VERSION: v26.0
-- DATABASE_URL: já configurado, valor secreto.
-- WIX_CLIENT_ID: já configurado, valor público.
+https://leonardo-refrigeracao-whatsapp.onrender.com/webhook/ycloud
 
-Callback para cadastrar na Meta:
-https://leonardo-refrigeracao-whatsapp.onrender.com/webhook/whatsapp
+Selecionar eventos (e apenas estes):
+- whatsapp.inbound_message.received — mensagens do cliente
+- whatsapp.smb.message.echoes — mensagens enviadas pelo responsável no aplicativo WhatsApp Business, para pausa da automação
 
-Assinar o tópico messages do WhatsApp Business Platform no painel do provedor/API.
+A YCloud utiliza assinatura:
+YCloud-Signature: t=<unix>,s=<hex-hmac-sha256>
+HMAC_SHA256( secret_da_YCloud, timestamp + "." + corpo_HTTP_original ).
 
-## Manter o número atual
-Para usar o MESMO número no aplicativo WhatsApp Business e na API, é necessário que o WhatsApp Business existente seja elegível e vinculado via um fornecedor que dê suporte à coexistência oficial e disponibilize acesso à API. Não desinstalar o app nem migrar o número para o Wix Inbox sem autorização expressa.
+**Não confundir com o webhook /webhook/whatsapp**, que recebe o formato nativo da Meta e não serve para YCloud.
 
-## Testes locais
-Na pasta refrigeracao-whatsapp:
-npm install
-npm test
-npm start
+Depois de criar o webhook, copiar o segredo de assinatura sem mostrá-lo em screenshots. Configurar no Render > Environment:
 
-O Render executa automaticamente os testes durante a implantação. Sem as credenciais Meta, o estado do servidor é awaiting_meta_onboarding e nenhuma mensagem automática é enviada.
+- YCLOUD_SENDER_NUMBER=+5521970338222 (já configurado)
+- YCLOUD_WEBHOOK_SECRET=(segredo do endpoint YCloud)
+- YCLOUD_API_KEY=(chave emitida em YCloud > Developer > API Keys)
+- YCLOUD_AUTOREPLY_ENABLED=false (já configurado; somente passar para true após validação)
+- DATABASE_URL=(banco Neon; já configurado)
+- WIX_CLIENT_ID=(Wix Headless visitor auth; já configurado)
 
-## Limites e cuidados
-O Render Free pode suspender após inatividade, causando atraso para reativar o webhook. Neon tem cotas gratuitas de armazenamento e processamento. Serviços da Meta ou de fornecedores podem cobrar por templates e mensagens, conforme modalidade contratada. Não existe integração de mensagens de entrada validada em produção até o onboarding.
+Enquanto o segredo estiver ausente, requisições POST em /webhook/ycloud retornam 503. Quando segredo e chave forem configurados, manter AUTOREPLY_ENABLED=false durante a inspeção inicial: evento válido é confirmado como pausado, sem processar dados de clientes nem emitir respostas. Só ativar após testes controlados e autorização do titular.
 
-Dados de clientes permanecem privados no Neon/Wix. O servidor não registra conteúdo de conversas em logs de aplicação. Não adicionar segredos ao GitHub.
+## Comportamento
+1. Valida assinatura e timestamp, restringe o evento ao número da empresa.
+2. Ignora eventos de grupo e outros números.
+3. Salva eventos relevantes em Neon, com deduplicação por event_id.
+4. Processa em fila persistente, cria contexto de conversa e aguarda confirmação explícita antes de registrar OS.
+5. Insere OS na coleção Wix via token de visitante sem permitir leitura pública.
+6. Envia respostas via YCloud API com X-API-Key enquanto a janela de conversa permite.
+7. Quando há mensagem manual do responsável no aplicativo, evento whatsapp.smb.message.echoes bloqueia respostas pendentes do robô e transfere para humano. Cliente escreve MENU para reiniciar.
+
+## Privacidade e custos
+Não inserir tokens em URLs, GitHub, prints ou mensagens de chat. Credenciais devem ficar apenas no Render.
+YCloud Free refere-se à mensalidade do provedor; mensagens fora das condições gratuitas, templates e outras operações podem gerar cobranças da Meta. Evite envios iniciados pela empresa até verificar a cobrança aplicável.
+Render Free pode suspender após inatividade, provocando atrasos em webhooks; monitorar os registros de entrega em YCloud > Developer > Webhooks.
+
+## Testes
+cd refrigeracao-whatsapp && npm install && npm test
+Os testes cobrem autenticação HMAC, filtro do número empresarial, transferência por mensagens manuais, valores somente mediante consulta, consentimento antes de gravar e cancelamento.
+
+Documentação YCloud:
+- https://docs.ycloud.com/en/documentation/developer/webhooks
+- https://nndocs.ycloud.com/reference/webhook-events-payloads
+- https://nndocs.ycloud.com/reference/whatsapp_message-send
