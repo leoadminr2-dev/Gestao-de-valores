@@ -102,3 +102,21 @@ test("urgência elétrica instrui segurança e transfere ao humano",()=>{
  assert.equal(r.mode,"human");
  assert.match(r.reply,/segurança/);
 });
+
+test("pedido textual de contrato tem prioridade sobre limpeza genérica",()=>{
+ const r=advance(empty,{text:"Quero um contrato de manutenção e limpeza para empresa"});
+ assert.equal(r.stage,"empresa");
+ assert.equal(r.data.servico,"Contrato de manutenção e limpeza");
+});
+test("atendimento empresarial escrito usa menu especializado",()=>{
+ const r=advance(empty,{text:"Preciso de manutenção na minha empresa"});
+ assert.equal(r.stage,"empresa_escolha");
+ assert.equal(r.data.tipoAtendimento,"Empresarial");
+});
+test("enquanto a transferência humana está pendente o robô não faz novas perguntas",()=>{
+ const r=advance({stage:"menu",mode:"bot",data:{handoffPending:true}},{text:"alô"});
+ assert.equal(r.reply,null);
+ const reset=advance({stage:"menu",mode:"bot",data:{handoffPending:true}},{text:"MENU"});
+ assert.equal(reset.mode,"bot");
+ assert.match(reset.reply,/Como podemos ajudar/);
+});
