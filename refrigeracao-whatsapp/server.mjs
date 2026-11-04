@@ -66,13 +66,22 @@ async function handleInbound(message){
   if(inserted.rowCount===0){duplicate=true;await db.query("COMMIT");return;}
   const current=sess.rows[0];
   const move=advance({stage:current.stage,mode:current.mode,data:current.data},incoming);
+  // A confirmação da transferência humana deve chegar antes de pausar o robô.
+  // Usamos JSONB como estado temporário, preservando o CHECK bot/human do banco.
+  const enteringHuman=current.mode==="bot"&&move.mode==="human"&&Boolean(move.reply);
+  const cancellingHandoff=Boolean(current.data?.handoffPending)&&move.mode==="bot"&&!move.data?.handoffPending;
+  const persistedMode=enteringHuman?"bot":move.mode;
+  const persistedData=enteringHuman?{...move.data,handoffPending:true}:move.data;
+  if(enteringHuman||cancellingHandoff){
+   await db.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HANDOFF_RESET' WHERE phone=$1 AND sent_at IS NULL AND cancelled_at IS NULL",[phone]);
+  }
   let reply=move.reply;
   if(move.order){
    const protocol=newProtocol();
    await db.query("INSERT INTO wa_orders (protocol,phone,payload) VALUES($1,$2,$3)",[protocol,phone,JSON.stringify(move.order)]);
    reply="✅ Solicitação recebida!\nProtocolo: *"+protocol+"*\n\nVamos avaliar seu pedido e confirmar a disponibilidade do atendimento. O horário solicitado *não está confirmado*. Obrigado por procurar a Leonardo Moreira Refrigeração!";
   }
-  await db.query("UPDATE wa_sessions SET stage=$2,mode=$3,data=$4,last_message_at=now(),updated_at=now() WHERE phone=$1",[phone,move.stage,move.mode,JSON.stringify(move.data)]);
+  await db.query("UPDATE wa_sessions SET stage=$2,mode=$3,data=$4,last_message_at=now(),updated_at=now() WHERE phone=$1",[phone,move.stage,persistedMode,JSON.stringify(persistedData)]);
   if(reply)await db.query("INSERT INTO wa_outbound (incoming_message_id,phone,message) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",[messageId,phone,reply]);
   await db.query("COMMIT");
  }catch(err){
@@ -148,7 +157,10 @@ async function wixInsert(order){
   bairro:String(d.bairro||""),
   equipamento:String(d.equipamento||""),
   servico:String(d.servico||""),
-  descricao:"Solicitação recebida pelo WhatsApp oficial. Preferência de visita: "+String(d.preferencia||"A combinar"),
+  descricao:("Solicitação recebida pelo WhatsApp oficial. "
+    +(d.tipoAtendimento?"Atendimento: "+String(d.tipoAtendimento)+". ":"")
+    +(d.empresa?"Empresa: "+String(d.empresa)+". ":"")
+    +"Preferência de atendimento ou retorno: "+String(d.preferencia||"A combinar")).slice(0,1500),
   origem:"WhatsApp Business Platform",
   periodoPreferido:String(d.preferencia||"A combinar"),
   status:"Novo pedido",
@@ -207,7 +219,7 @@ async function sendOutbox(){
   const picked=await pool.query("UPDATE wa_outbound SET lease_until=now()+interval '90 seconds',attempts=attempts+1 WHERE id=(SELECT id FROM wa_outbound WHERE sent_at IS NULL AND cancelled_at IS NULL AND attempts<15 AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING id,phone,message");
   if(picked.rowCount===0)break;
   const row=picked.rows[0];
-  const last=await pool.query("SELECT last_message_at,mode FROM wa_sessions WHERE phone=$1",[row.phone]);
+  const last=await pool.query("SELECT last_message_at,mode,data FROM wa_sessions WHERE phone=$1",[row.phone]);
   if(last.rows[0]?.mode==="human"){
    await pool.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE id=$1",[row.id]);
    continue;
@@ -219,6 +231,10 @@ async function sendOutbox(){
   try{
    await sendMessage(row.phone,row.message);
    await pool.query("UPDATE wa_outbound SET sent_at=now(),lease_until=NULL,last_error=NULL WHERE id=$1",[row.id]);
+   // A partir daqui, só Leonardo ou o comando MENU retoma a conversa.
+   if(last.rows[0]?.data?.handoffPending===true){
+    await pool.query("UPDATE wa_sessions SET mode='human',data=data-'handoffPending',updated_at=now() WHERE phone=$1 AND mode='bot' AND data->>'handoffPending'='true'",[row.phone]);
+   }
   }catch(err){
    await pool.query("UPDATE wa_outbound SET last_error=$2,lease_until=now()+interval '3 minutes' WHERE id=$1",[row.id,String(err?.message||"SEND_FAILED").slice(0,100)]);
   }
