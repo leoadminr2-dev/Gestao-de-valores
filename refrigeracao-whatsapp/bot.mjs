@@ -128,7 +128,7 @@ export function advance(session, incoming) {
   const data={...(session?.data||{})};
   const raw=String(incoming?.text||"").trim().slice(0,1000),t=norm(raw);
   if(/^(menu|inicio|reiniciar|0)$/.test(t))return {stage:"menu",mode:"bot",data:{},reply:MENU};
-  if(mode==="human")return {stage,mode,data,reply:null};
+  if(mode==="human" || data.handoffPending === true)return {stage,mode,data,reply:null};
   if(/^(9|humano|atendente|responsavel|falar com leonardo|falar com responsavel|pessoa de verdade)$/.test(t))
     return human(stage,data);
   if(/^(cancelar|desistir|cancela)$/.test(t))
