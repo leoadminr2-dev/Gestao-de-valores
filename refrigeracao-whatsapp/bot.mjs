@@ -4,31 +4,36 @@ export const PLATFORM_URL = "https://headless-qqhigtkprnz-leoadminr2-140a.wix-si
 export const MENU = [
   "❄️ *Leonardo Moreira Refrigeração*",
   "",
-  "Olá! 👋 Seja muito bem-vindo(a).",
-  "É um prazer receber você. Vou ajudar a encontrar a melhor solução para sua casa ou empresa.",
+  "Olá! 👋 Seja bem-vindo(a)!",
   "",
   "*Como podemos ajudar hoje?*",
-  "1️⃣ *Instalação* — ar-condicionado Split e de janela.",
-  "2️⃣ *Manutenção e consertos* — Split, janela, geladeira, freezer e máquina de lavar.",
-  "3️⃣ *Limpeza profunda* — higienização de ar-condicionado Split e de janela.",
-  "4️⃣ *Atendimento residencial* — soluções para sua casa.",
-  "5️⃣ *Atendimento empresarial* — comércios, escritórios e empresas.",
-  "6️⃣ *Contratos de manutenção e limpeza* — planejamento preventivo e periódico.",
-  "7️⃣ *Compra e venda* — geladeiras, ar-condicionado e máquinas de lavar.",
-  "8️⃣ *Acompanhar solicitação* — envie seu protocolo para conferência.",
-  "9️⃣ *Falar com Leonardo* — atendimento com o responsável.",
   "",
-  "🌐 *Plataforma de atendimento:* " + PLATFORM_URL,
+  "1️⃣ *Ar-condicionado*",
+  "Instalação, manutenção e limpeza",
   "",
-  "Responda com o número ou conte com suas palavras o que precisa. 💬"
+  "2️⃣ *Geladeiras, freezers e lavadoras*",
+  "Consertos, compra e venda",
+  "",
+  "3️⃣ *Empresas e contratos*",
+  "Serviços e manutenção preventiva",
+  "",
+  "4️⃣ *Agendamento e acompanhamento*",
+  "Solicitações e protocolos",
+  "",
+  "5️⃣ *Falar com Leonardo*",
+  "Atendimento humano",
+  "",
+  "💬 Digite o número ou conte o que precisa."
 ].join("\n");
 
 export const norm = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 const HUMAN_REPLY = "Claro! 💬 Vou deixar a conversa com Leonardo, que responderá assim que possível. Você não precisa repetir as informações que já enviou.\n\nSe quiser voltar ao atendimento automático, escreva *MENU*.";
-const RESIDENTIAL_MENU = "🏠 Você está no atendimento residencial. O que você precisa?\n*1* Instalação de ar-condicionado\n*2* Manutenção ou conserto\n*3* Limpeza profunda de ar-condicionado\n\nPode responder com o número ou descrever o problema.";
-const BUSINESS_MENU = "🏢 Vamos cuidar da sua empresa. O que você procura?\n*1* Manutenção ou conserto pontual\n*2* Limpeza profunda dos aparelhos\n*3* Contrato de manutenção e limpeza periódica\n\nResponda com o número ou descreva sua necessidade.";
-const MARKET_MENU = "♻️ Você deseja *comprar* ou *vender* um equipamento?\n*1* Quero comprar\n*2* Quero vender\n\nTrabalhamos com consultas sobre geladeiras, ar-condicionado e máquinas de lavar; disponibilidade e condições são confirmadas pelo responsável.";
-const AIR_MENU = "❄️ Entendi que você precisa de ajuda com ar-condicionado. Qual serviço?\n*1* Instalação\n*2* Manutenção ou conserto\n*3* Limpeza profunda\n\nAtendemos modelos Split e de janela.";
+const RESIDENTIAL_MENU = "🏠 *Atendimento residencial*\n\n1️⃣ *Instalação de ar-condicionado*\n\n2️⃣ *Manutenção e consertos*\n\n3️⃣ *Limpeza profunda*\n\nResponda com o número ou conte seu problema.\nDigite *0* para voltar.";
+const BUSINESS_MENU = "🏢 *Atendimento para empresas*\n\n1️⃣ *Manutenção e consertos*\n\n2️⃣ *Limpeza profunda*\n\n3️⃣ *Contrato preventivo e periódico*\n\nResponda com o número ou descreva sua necessidade.\nDigite *0* para voltar.";
+const MARKET_MENU = "♻️ *Compra e venda de equipamentos*\n\n1️⃣ *Quero comprar*\n\n2️⃣ *Quero vender*\n\nGeladeiras, ar-condicionado e máquinas de lavar. Disponibilidade e condições serão confirmadas por Leonardo.\nDigite *0* para voltar.";
+const AIR_MENU = "❄️ *Ar-condicionado Split e de janela*\n\n1️⃣ *Instalação*\n\n2️⃣ *Manutenção e consertos*\n\n3️⃣ *Limpeza profunda*\n\nResponda com o número ou descreva o serviço.\nDigite *0* para voltar.";
+const APPLIANCE_MENU = "🏠 *Geladeiras, freezers e máquinas de lavar*\n\n1️⃣ *Manutenção e consertos*\n\n2️⃣ *Comprar equipamento*\n\n3️⃣ *Vender equipamento*\n\nResponda com o número ou conte o problema.\nDigite *0* para voltar.";
+const SCHEDULE_MENU = "🗓️ *Agendamento e acompanhamento*\n\n1️⃣ *Solicitar atendimento online*\n\n2️⃣ *Consultar protocolo*\n\nAgendamentos só são confirmados após retorno de Leonardo.\nDigite *0* para voltar.";
 
 function human(stage, data) {
   return {stage, mode:"human", data, reply:HUMAN_REPLY};
@@ -55,23 +60,28 @@ function route(raw, previous={}) {
   return null;
 }
 function initialIntent(t, previous={}) {
-  // As intenções específicas vêm antes de palavras genéricas como limpeza/manutenção.
+  // Compatibilidade: antigas opções 6-8 permanecem aceitas, mas não aparecem no menu.
   if(t==="6" || /contrato|preventiva|periodic/.test(t))
     return orderFlow("Contrato de manutenção e limpeza",previous,{tipoAtendimento:"Empresarial"});
-  if(t==="5" || /empresarial|\bempresa\b|comercio|escritorio/.test(t))
+  if(t==="3" || /empresarial|\bempresa\b|comercio|escritorio/.test(t))
     return {stage:"empresa_escolha",mode:"bot",data:{...previous,tipoAtendimento:"Empresarial"},reply:BUSINESS_MENU};
-  if(t==="4" || /residencial|minha casa|apartamento/.test(t))
-    return {stage:"residencial",mode:"bot",data:{...previous,tipoAtendimento:"Residencial"},reply:RESIDENTIAL_MENU};
-  if(t==="7" || /compra e venda|comprar|vender|quero comprar|quero vender/.test(t))
+  if(t==="4" || /agendamento|agendar|acompanhar|protocolo|andamento do pedido/.test(t))
+    return {stage:"agenda_escolha",mode:"bot",data:{...previous},reply:SCHEDULE_MENU};
+  if(t==="7" || /compra e venda|comprar|vender/.test(t))
     return {stage:"mercado",mode:"bot",data:{...previous},reply:MARKET_MENU};
-  if(t==="8" || /acompanhar|protocolo|andamento do pedido/.test(t))
-    return {stage:"protocolo",mode:"bot",data:{...previous},reply:"🧾 Posso ajudar a encaminhar sua consulta. Envie o número do protocolo da solicitação. Se não tiver, informe seu nome e bairro. Leonardo verificará o andamento; não vou informar um status sem conferência."};
-  if(t==="1" || /instalac|instalar/.test(t))return orderFlow("Instalação de ar-condicionado",previous);
-  if(t==="2" || /(manutencao|consert|reparo|defeito|nao gela|nao liga|nao centrifuga|parou de funcionar|geladeira|freezer|maquina de lavar|lavadora)/.test(t))
+  if(t==="8")return {stage:"protocolo",mode:"bot",data:{...previous},reply:"🧾 Envie o protocolo da solicitação. Se não tiver, informe seu nome e bairro. Leonardo verificará o andamento antes de informar qualquer status."};
+  if(t==="1")return {stage:"ar_escolha",mode:"bot",data:{...previous},reply:AIR_MENU};
+  if(t==="2")return {stage:"eletro_escolha",mode:"bot",data:{...previous},reply:APPLIANCE_MENU};
+  if(/residencial|minha casa|apartamento/.test(t))
+    return {stage:"residencial",mode:"bot",data:{...previous,tipoAtendimento:"Residencial"},reply:RESIDENTIAL_MENU};
+  if(/instalac|instalar/.test(t))return orderFlow("Instalação de ar-condicionado",previous);
+  if(/(manutencao|consert|reparo|defeito|nao gela|nao liga|nao centrifuga|parou de funcionar|vazamento)/.test(t))
     return orderFlow("Manutenção e consertos",previous);
-  if(t==="3" || /limpeza|higieniz/.test(t))return orderFlow("Limpeza profunda e higienização",previous);
+  if(/limpeza|higieniz/.test(t))return orderFlow("Limpeza profunda e higienização",previous);
   if(/ar condicionado|split|modelo de janela/.test(t))
     return {stage:"ar_escolha",mode:"bot",data:{...previous},reply:AIR_MENU};
+  if(/geladeira|freezer|maquina de lavar|lavadora/.test(t))
+    return {stage:"eletro_escolha",mode:"bot",data:{...previous},reply:APPLIANCE_MENU};
   return null;
 }
 export function price(text, selected="") {
@@ -129,7 +139,7 @@ export function advance(session, incoming) {
   const raw=String(incoming?.text||"").trim().slice(0,1000),t=norm(raw);
   if(/^(menu|inicio|reiniciar|0)$/.test(t))return {stage:"menu",mode:"bot",data:{},reply:MENU};
   if(mode==="human" || data.handoffPending === true)return {stage,mode,data,reply:null};
-  if(/^(9|humano|atendente|responsavel|falar com leonardo|falar com responsavel|pessoa de verdade)$/.test(t))
+  if(/^(5|9|humano|atendente|responsavel|falar com leonardo|falar com responsavel|pessoa de verdade)$/.test(t))
     return human(stage,data);
   if(/^(cancelar|desistir|cancela)$/.test(t))
     return {stage:"menu",mode:"bot",data:{},reply:"Tudo bem, sem problema. Não registrei nenhum novo pedido.\n\n"+MENU};
@@ -152,15 +162,31 @@ export function advance(session, incoming) {
     }
     return {stage,mode,data,reply:MENU};
   }
-  if(["residencial","empresa_escolha","ar_escolha"].includes(stage)){
+  if(stage==="agenda_escolha") {
+    if(t==="1" || /agend|solicit|marcar/.test(t))
+      return {stage:"menu",mode,data:{},reply:"🌐 *Solicite seu atendimento pela plataforma:*\n"+PLATFORM_URL+"\n\nVocê pode informar os detalhes do serviço e sua preferência de data. Leonardo confirmará a disponibilidade antes de fechar o agendamento.\n\nSe preferir continuar pelo WhatsApp, digite *0* para escolher o serviço."};
+    if(t==="2" || /acompanhar|protocolo|andamento/.test(t))
+      return {stage:"protocolo",mode,data,reply:"🧾 Envie seu protocolo para conferência. Se não tiver, informe seu nome e bairro. Leonardo verificará o andamento e responderá por aqui."};
+    return {stage,mode,data,reply:SCHEDULE_MENU};
+  }
+  if(stage==="eletro_escolha") {
+    if(t==="1" || /(manutencao|consert|reparo|defeito|nao gela|nao liga|nao centrifuga|geladeira|freezer|maquina de lavar|lavadora)/.test(t))
+      return orderFlow("Manutenção e consertos",data);
+    if(t==="2" || /comprar|compra/.test(t))return orderFlow("Compra de equipamento",data);
+    if(t==="3" || /vender|venda/.test(t))return orderFlow("Venda de equipamento",data);
+    return {stage,mode,data,reply:APPLIANCE_MENU};
+  }
+  if(stage==="empresa_escolha") {
+    let servico="";
+    if(t==="1" || /manutencao|consert|reparo/.test(t))servico="Manutenção e consertos";
+    else if(t==="2" || /limpeza|higieniza/.test(t))servico="Limpeza profunda e higienização";
+    else if(t==="3" || /contrato|preventiva|periodica/.test(t))servico="Contrato de manutenção e limpeza";
+    else if(/instalac|instalar/.test(t))servico="Instalação de ar-condicionado";
+    return servico?orderFlow(servico,data,{tipoAtendimento:"Empresarial"}):{stage,mode,data,reply:BUSINESS_MENU};
+  }
+  if(["residencial","ar_escolha"].includes(stage)){
     const next=route(raw,data);
-    if(!next)return {stage,mode,data,reply:stage==="residencial"?RESIDENTIAL_MENU:stage==="empresa_escolha"?BUSINESS_MENU:AIR_MENU};
-    if(stage==="empresa_escolha"){
-      next.data.tipoAtendimento="Empresarial";
-      if(t==="3"||/contrato|periodica|preventiva/.test(t))next.data.servico="Contrato de manutenção e limpeza";
-      next.stage="empresa";
-      next.reply="Perfeito, vamos organizar a necessidade da sua empresa. 🏢\n\nQual o nome da empresa ou estabelecimento?";
-    }
+    if(!next)return {stage,mode,data,reply:stage==="residencial"?RESIDENTIAL_MENU:AIR_MENU};
     if(stage==="residencial")next.data.tipoAtendimento="Residencial";
     return next;
   }

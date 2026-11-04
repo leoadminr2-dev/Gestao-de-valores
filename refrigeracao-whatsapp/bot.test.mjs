@@ -5,12 +5,13 @@ const empty={stage:"menu",mode:"bot",data:{}};
 test("boas-vindas não anunciam preços",()=>{const r=advance(empty,{text:"olá"});assert.match(r.reply,/Como podemos ajudar/);assert.doesNotMatch(r.reply,/R\$\s*\d/);});
 test("consultas explícitas mostram somente valores iniciais",()=>{assert.match(price("preço limpeza"),/R\$ 280/);assert.match(price("troca compressor"),/R\$ 550/);});
 test("solicitação exige consentimento",()=>{
- let r=advance(empty,{text:"1"});assert.equal(r.stage,"nome");
+ let r=advance(empty,{text:"1"});assert.equal(r.stage,"ar_escolha");
+ r=advance(r,{text:"1"});assert.equal(r.stage,"nome");
  r=advance(r,{text:"Ana Souza"});r=advance(r,{text:"Irajá"});r=advance(r,{text:"Split LG 9000"});r=advance(r,{text:"Quinta de manhã"});
  assert.equal(r.stage,"confirmar");assert.equal(r.order,undefined);
  r=advance(r,{text:"SIM"});assert.equal(r.order.cliente,"Ana Souza");
 });
-test("humano impede respostas até MENU",()=>{let r=advance(empty,{text:"9"});assert.equal(r.mode,"human");r=advance(r,{text:"ajuda"});assert.equal(r.reply,null);r=advance(r,{text:"menu"});assert.equal(r.mode,"bot");});
+test("humano impede respostas até MENU",()=>{let r=advance(empty,{text:"5"});assert.equal(r.mode,"human");r=advance(r,{text:"ajuda"});assert.equal(r.reply,null);r=advance(r,{text:"menu"});assert.equal(r.mode,"bot");});
 test("cancelamento não cria OS",()=>{const r=advance({stage:"confirmar",mode:"bot",data:{}},{text:"cancelar"});assert.equal(r.order,undefined);});
 
 import {appReplyPhones} from "./coexistence.mjs";
@@ -46,13 +47,15 @@ test("YCloud eco do WhatsApp Business suspende robô do destinatário",()=>{
  assert.equal(relevantYCloudEvent({...evt,type:"whatsapp.message.updated"},"+5521970338222"),null);
 });
 
-test("menu apresenta todos os serviços e o acesso à plataforma",()=>{
+test("menu curto e espaçado apresenta cinco categorias sem preços e sem Ler mais desnecessário",()=>{
  const r=advance(empty,{text:"Olá"});
- for(const label of ["Instalação","Manutenção e consertos","Limpeza profunda","Atendimento residencial","Atendimento empresarial","Contratos de manutenção","Compra e venda","Acompanhar solicitação","Falar com Leonardo"]){
-  assert.match(r.reply,new RegExp(label));
- }
- assert.match(r.reply,/wix-site-host\.com/);
+ for(const label of ["Ar-condicionado","Geladeiras, freezers e lavadoras","Empresas e contratos","Agendamento e acompanhamento","Falar com Leonardo"])
+   assert.match(r.reply,new RegExp(label));
+ for(let n=1;n<=5;n++)assert.match(r.reply,new RegExp(n+"️⃣"));
+ assert.doesNotMatch(r.reply,/6️⃣|7️⃣|8️⃣|9️⃣/);
  assert.doesNotMatch(r.reply,/R\$\s*\d/);
+ assert.ok(r.reply.length<650);
+ assert.match(r.reply,/limpeza\n\n2️⃣/);
 });
 test("cliente pode abrir a plataforma diretamente pelo WhatsApp",()=>{
  const r=advance(empty,{text:"qual é o link da plataforma?"});
@@ -60,21 +63,36 @@ test("cliente pode abrir a plataforma diretamente pelo WhatsApp",()=>{
  assert.match(r.reply,/protocolo/);
  assert.equal(r.stage,"menu");
 });
-test("seleções cobrem os tipos de equipamento e limpeza profunda",()=>{
- assert.match(advance(empty,{text:"2"}).reply,/organizar/);
- assert.equal(advance(empty,{text:"3"}).data.servico,"Limpeza profunda e higienização");
+test("categorias abrem submenus antes de pedir dados",()=>{
+ assert.equal(advance(empty,{text:"1"}).stage,"ar_escolha");
+ assert.equal(advance(empty,{text:"2"}).stage,"eletro_escolha");
+ assert.equal(advance(empty,{text:"3"}).stage,"empresa_escolha");
+ assert.equal(advance(empty,{text:"4"}).stage,"agenda_escolha");
+ assert.equal(advance(empty,{text:"5"}).mode,"human");
+});
+test("atendimento de ar-condicionado mantém instalação, manutenção e limpeza",()=>{
+ const a=advance(empty,{text:"1"});
+ assert.equal(advance(a,{text:"1"}).data.servico,"Instalação de ar-condicionado");
+ assert.equal(advance(a,{text:"2"}).data.servico,"Manutenção e consertos");
+ assert.equal(advance(a,{text:"3"}).data.servico,"Limpeza profunda e higienização");
+});
+test("geladeiras e lavadoras mantêm consertos e compra e venda",()=>{
+ const a=advance(empty,{text:"2"});
+ assert.equal(advance(a,{text:"1"}).data.servico,"Manutenção e consertos");
+ assert.equal(advance(a,{text:"2"}).data.servico,"Compra de equipamento");
+ assert.equal(advance(a,{text:"3"}).data.servico,"Venda de equipamento");
  assert.equal(advance(empty,{text:"Minha máquina de lavar não centrifuga"}).data.servico,"Manutenção e consertos");
  assert.equal(advance(empty,{text:"Minha geladeira não gela"}).stage,"nome");
 });
-test("residencial encaminha instalação de ar-condicionado",()=>{
- const a=advance(empty,{text:"4"});
+test("residencial ainda funciona por linguagem natural",()=>{
+ const a=advance(empty,{text:"atendimento residencial"});
  assert.equal(a.stage,"residencial");
  const b=advance(a,{text:"1"});
  assert.equal(b.data.tipoAtendimento,"Residencial");
  assert.equal(b.data.servico,"Instalação de ar-condicionado");
 });
 test("empresas coletam nome e informações do contrato",()=>{
- let r=advance(empty,{text:"5"});
+ let r=advance(empty,{text:"3"});
  assert.equal(r.stage,"empresa_escolha");
  r=advance(r,{text:"3"});
  assert.equal(r.stage,"empresa");
@@ -83,19 +101,33 @@ test("empresas coletam nome e informações do contrato",()=>{
  assert.equal(r.data.empresa,"Mercado Exemplo");
  assert.equal(r.stage,"nome");
 });
-test("compra ou venda fica sob avaliação e autorização",()=>{
- let r=advance(empty,{text:"7"});
- assert.equal(r.stage,"mercado");
+test("acompanhar protocolo não informa status sem conferência",()=>{
+ let r=advance(empty,{text:"4"});
+ assert.equal(r.stage,"agenda_escolha");
  r=advance(r,{text:"2"});
- assert.equal(r.data.servico,"Venda de equipamento");
- assert.equal(r.stage,"nome");
-});
-test("acompanhamento passa ao responsável sem prometer status automático",()=>{
- let r=advance(empty,{text:"8"});
  assert.equal(r.stage,"protocolo");
  r=advance(r,{text:"WA-20261104-ABCD1234"});
  assert.equal(r.mode,"human");
  assert.match(r.reply,/verificará/);
+});
+test("agendamento envia plataforma sem prometer data confirmada",()=>{
+ let r=advance(empty,{text:"4"});
+ r=advance(r,{text:"1"});
+ assert.match(r.reply,/wix-site-host\.com/);
+ assert.match(r.reply,/confirmará/);
+ assert.equal(r.stage,"menu");
+});
+test("cliente pode voltar ao menu principal",()=>{
+ const a=advance(empty,{text:"1"});
+ const b=advance(a,{text:"0"});
+ assert.equal(b.stage,"menu");
+ assert.match(b.reply,/Como podemos ajudar hoje/);
+});
+test("compra e venda anterior continua acessível",()=>{
+ let r=advance(empty,{text:"7"});
+ assert.equal(r.stage,"mercado");
+ r=advance(r,{text:"2"});
+ assert.equal(r.data.servico,"Venda de equipamento");
 });
 test("urgência elétrica instrui segurança e transfere ao humano",()=>{
  const r=advance(empty,{text:"Saiu fumaça e cheiro de queimado"});
