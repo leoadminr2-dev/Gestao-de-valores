@@ -11,7 +11,7 @@ export function customerPhone(value){
 }
 export function customerMessage(order,kind,extra=""){
  if(!kinds.includes(kind))throw Object.assign(new Error("tipo_invalido"),{status:422});
- const name=clean(order?.payload?.cliente||"cliente",90).replace(/\s+TESTE\b/ig," TESTE");
+ const name=clean(order?.payload?.cliente||"cliente",90);
  const service=clean(order?.payload?.servico||"atendimento solicitado",130);
  const device=clean(order?.payload?.equipamento,110);
  const protocol=clean(order?.protocol,50);
@@ -20,8 +20,7 @@ export function customerMessage(order,kind,extra=""){
  const proposedDate=when&&!Number.isNaN(when.getTime())?dateFormatter.format(when):"";
  const note=String(extra||"").trim();
  if(note.length>240||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(note))throw Object.assign(new Error("mensagem_adicional_invalida"),{status:422});
- const parts=[`Olá, ${name}! 👋`,"Aqui é da *Leonardo Moreira Refrigeração*.","`"];
- parts.pop();
+ const parts=[`Olá, ${name}! 👋`,"Aqui é da *Leonardo Moreira Refrigeração*."];
  parts.push(`Sobre sua solicitação *${protocol}*:`,`Serviço: ${service}`);
  if(device)parts.push(`Equipamento: ${device}`);
  if(kind==="retorno")parts.push("Recebemos sua solicitação e estamos dando andamento ao atendimento. Caso tenha informações ou fotos do equipamento, pode encaminhar por aqui.");
