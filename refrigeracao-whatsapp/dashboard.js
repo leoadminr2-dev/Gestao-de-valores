@@ -47,6 +47,7 @@ async function refresh(){
   [["metricTotal",total],["metricNew",metrics.novo||0],["metricQuotes",metrics.orcamento||0],["metricScheduled",metrics.agendado||0],["metricProgress",metrics.andamento||0],["metricDone",metrics.concluido||0]].forEach(([id,value])=>text(id,value));
   text("lastUpdate","Atualizado às "+new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",hour:"2-digit",minute:"2-digit"}).format(new Date()));
   renderOrders();
+  if(!el("calendarSection").hidden)renderOpsCalendar();
   if(selected){const row=allOrders.find(x=>x.protocol===selected);if(row)renderDetail(row);else{selected="";renderDetail(null);}}
  }catch(err){
   text("lastUpdate","Falha ao atualizar");
@@ -68,6 +69,130 @@ function setNav(id){
 function make(tag,cls,txt){
  const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n;
 }
+
+/* Painel interno: agenda mensal com visitas planejadas e datas solicitadas.
+   Nenhuma informação é exposta na área pública; nada confirma um horário para o cliente. */
+const rioToday=()=>new Intl.DateTimeFormat("sv-SE",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+let opsMonth=new Date(Date.UTC(Number(rioToday().slice(0,4)),Number(rioToday().slice(5,7))-1,1));
+let opsSelectedDay=rioToday();
+function dateKey(d){
+ if(!d)return"";
+ const x=new Date(d);
+ return Number.isNaN(x.getTime())?"":new Intl.DateTimeFormat("sv-SE",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).format(x);
+}
+function calendarItems(){
+ const items=[];
+ for(const o of allOrders){
+  if(o.operation_status==="cancelado")continue;
+  const planned=dateKey(o.appointment_at);
+  const preferred=String(o.payload?.dataPreferida||o.payload?.data||"");
+  if(planned){
+   items.push({day:planned,kind:"planned",order:o,stamp:new Date(o.appointment_at).getTime()});
+  }
+  if(/^\d{4}-\d{2}-\d{2}$/.test(preferred)&&planned!==preferred){
+   items.push({day:preferred,kind:"requested",order:o,stamp:null});
+  }
+ }
+ return items;
+}
+function openCalendar(){
+ el("calendarSection").hidden=false;
+ const today=rioToday();
+ if(!opsSelectedDay)opsSelectedDay=today;
+ const [y,m]=opsSelectedDay.split("-").map(Number);
+ opsMonth=new Date(Date.UTC(y,m-1,1));
+ renderOpsCalendar();
+ el("calendarSection").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function closeCalendar(){el("calendarSection").hidden=true;}
+function calendarOrder(protocol){
+ const o=allOrders.find(x=>x.protocol===protocol);
+ if(!o)return;
+ selected=protocol;
+ closeCalendar();
+ setNav("navOrders");
+ setFilter("todos");
+ renderOrders();
+ renderDetail(o);
+ el("ordersSection").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function renderOpsDay(items){
+ const panel=el("opsDayOrders");panel.replaceChildren();
+ const x=new Date(opsSelectedDay+"T12:00:00Z");
+ text("opsSelectedDate",new Intl.DateTimeFormat("pt-BR",{timeZone:"UTC",weekday:"long",day:"2-digit",month:"long",year:"numeric"}).format(x));
+ const todayItems=items.filter(x=>x.day===opsSelectedDay);
+ const planned=todayItems.filter(x=>x.kind==="planned");
+ const requested=todayItems.filter(x=>x.kind==="requested");
+ text("opsDayCount",planned.length+" visita(s) planejada(s) · "+requested.length+" solicitação(ões) de data");
+ if(!todayItems.length){
+  panel.append(make("div","ops-calendar-empty","Nenhuma visita planejada ou solicitação de data neste dia."));
+  return;
+ }
+ todayItems.sort((a,b)=>(a.kind===b.kind?Number(a.stamp||0)-Number(b.stamp||0):a.kind==="planned"?-1:1));
+ const conflicts=new Set();
+ for(let i=0;i<planned.length;i++){
+  for(let j=i+1;j<planned.length;j++){
+   if(Math.abs(planned[i].stamp-planned[j].stamp)<2*60*60*1000){
+    conflicts.add(planned[i].order.protocol);conflicts.add(planned[j].order.protocol);
+   }
+  }
+ }
+ if(conflicts.size){
+  const warning=make("p","ops-calendar-warning","Atenção: há visitas planejadas com horários próximos (menos de duas horas entre elas). Verifique deslocamento e duração antes de confirmar.");
+  warning.setAttribute("role","status");panel.append(warning);
+ }
+ for(const entry of todayItems){
+  const o=entry.order;
+  const card=make("button","ops-day-order");
+  card.type="button";
+  const heading=make("span","ops-day-order-name",o.payload?.cliente||"Cliente");
+  const type=entry.kind==="planned"?"Visita planejada":"Data solicitada";
+  const badge=make("span","ops-day-pill "+entry.kind,type);
+  const title=make("span","ops-day-order-header");title.append(heading,badge);
+  const desc=make("span","ops-day-order-desc",o.payload?.servico||"Serviço solicitado");
+  const info=entry.kind==="planned"?dateText(o.appointment_at):"Horário ainda não definido";
+  const note=make("span","ops-day-order-foot",info+" · "+(labels[o.operation_status]||"Em análise"));
+  card.append(title,desc,note);
+  card.setAttribute("aria-label","Abrir ordem "+o.protocol+", "+type);
+  card.addEventListener("click",()=>calendarOrder(o.protocol));
+  panel.append(card);
+ }
+}
+function renderOpsCalendar(){
+ const host=el("opsCalendarGrid");if(!host)return;
+ host.replaceChildren();
+ const year=opsMonth.getUTCFullYear(),month=opsMonth.getUTCMonth();
+ const first=new Date(Date.UTC(year,month,1)).getUTCDay();
+ const last=new Date(Date.UTC(year,month+1,0)).getUTCDate();
+ const title=new Intl.DateTimeFormat("pt-BR",{timeZone:"UTC",month:"long",year:"numeric"}).format(opsMonth);
+ text("opsCalendarMonth",title.charAt(0).toUpperCase()+title.slice(1));
+ for(const day of ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"]){
+  host.append(make("span","ops-calendar-weekday",day));
+ }
+ for(let i=0;i<first;i++)host.append(make("span","ops-cal-padding"));
+ const items=calendarItems();
+ const today=rioToday();
+ for(let d=1;d<=last;d++){
+  const date=String(year).padStart(4,"0")+"-"+String(month+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+  const day=make("button","ops-calendar-date");
+  day.type="button";
+  const planned=items.filter(x=>x.day===date&&x.kind==="planned").length;
+  const requested=items.filter(x=>x.day===date&&x.kind==="requested").length;
+  day.append(make("strong","",String(d)));
+  const counts=make("span","ops-calendar-eventcounts");
+  if(planned)counts.append(make("span","ops-count-planned",planned+" visita"+(planned>1?"s":"")));
+  if(requested)counts.append(make("span","ops-count-requested",requested+" pedido"+(requested>1?"s":"")));
+  day.append(counts);
+  if(date===today)day.classList.add("today");
+  if(date===opsSelectedDay)day.classList.add("selected");
+  day.setAttribute("aria-label",date.split("-").reverse().join("/")+": "+planned+" visitas planejadas, "+requested+" datas solicitadas");
+  day.setAttribute("aria-pressed",String(date===opsSelectedDay));
+  day.addEventListener("click",()=>{opsSelectedDay=date;renderOpsCalendar();});
+  host.append(day);
+ }
+ renderOpsDay(items);
+}
+
 function renderOrders(){
  const list=el("ordersList");list.replaceChildren();
  const items=allOrders.filter(o=>(filter==="todos"||o.operation_status===filter)&&
@@ -262,7 +387,15 @@ document.addEventListener("DOMContentLoaded",()=>{
  el("statusFilter").addEventListener("change",e=>setFilter(e.target.value));
  document.querySelectorAll(".stat-card").forEach(b=>b.addEventListener("click",()=>{setFilter(b.dataset.filter);setNav("navOrders");el("ordersSection").scrollIntoView({behavior:"smooth"});}));
  const nav={navOverview:"todos",navOrders:"todos",navCalendar:"agendado",navQuotes:"orcamento"};
- Object.entries(nav).forEach(([id,value])=>el(id).addEventListener("click",()=>{setNav(id);setFilter(value);if(id!=="navOverview")el("ordersSection").scrollIntoView({behavior:"smooth"});else window.scrollTo({top:0,behavior:"smooth"});}));
+ Object.entries(nav).forEach(([id,value])=>el(id).addEventListener("click",()=>{
+   setNav(id);
+   if(id==="navCalendar"){openCalendar();return;}
+   closeCalendar();setFilter(value);
+   if(id!=="navOverview")el("ordersSection").scrollIntoView({behavior:"smooth"});else window.scrollTo({top:0,behavior:"smooth"});
+  }));
+  el("opsCalendarPrev").addEventListener("click",()=>{opsMonth=new Date(Date.UTC(opsMonth.getUTCFullYear(),opsMonth.getUTCMonth()-1,1));opsSelectedDay=new Intl.DateTimeFormat("sv-SE",{timeZone:"UTC",year:"numeric",month:"2-digit",day:"2-digit"}).format(opsMonth);renderOpsCalendar();});
+  el("opsCalendarNext").addEventListener("click",()=>{opsMonth=new Date(Date.UTC(opsMonth.getUTCFullYear(),opsMonth.getUTCMonth()+1,1));opsSelectedDay=new Intl.DateTimeFormat("sv-SE",{timeZone:"UTC",year:"numeric",month:"2-digit",day:"2-digit"}).format(opsMonth);renderOpsCalendar();});
+  el("opsCalendarToday").addEventListener("click",()=>{opsSelectedDay=rioToday();const y=Number(opsSelectedDay.slice(0,4)),m=Number(opsSelectedDay.slice(5,7));opsMonth=new Date(Date.UTC(y,m-1,1));renderOpsCalendar();});
  el("orderForm").addEventListener("submit",saveOrder);
  el("previewReply").addEventListener("click",previewCustomerReply);
  el("sendReplyApi").addEventListener("click",sendCustomerReply);
