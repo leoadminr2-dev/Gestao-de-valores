@@ -3,6 +3,7 @@ const el=id=>document.getElementById(id);
 const base="/painel/api";
 const labels={novo:"Novo pedido",orcamento:"Orçamento pendente",agendado:"Agendado",andamento:"Em andamento",concluido:"Concluído",cancelado:"Cancelado"};
 let csrf="",allOrders=[],metrics={},filter="todos",selected="",search="";
+let replyProposal=null,replyKey="",lastReplyProtocol="";
 const fmt=new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
 const longDate=new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",weekday:"long",day:"numeric",month:"long",year:"numeric"});
 function dateText(d){if(!d)return"—";const x=new Date(d);return Number.isNaN(x.getTime())?"—":fmt.format(x);}
@@ -114,6 +115,9 @@ function renderDetail(o){
  el("editDate").value=localDate(o.appointment_at);
  el("editNotes").value=o.admin_notes||"";
  text("saveStatus","");
+ if(lastReplyProtocol!==o.protocol){el("customerExtra").value="";el("replyKind").value="retorno";lastReplyProtocol=o.protocol;}
+ clearReplyPreview();
+ void loadReplyHistory(o.protocol);
 }
 function showMessage(message,error=false){
  const v=el("saveStatus");v.textContent=message;v.classList.toggle("error",error);
@@ -132,6 +136,83 @@ async function saveOrder(e){
   if(err.status===401){showLogin("Sua sessão expirou.");return;}
   showMessage("Falha ao salvar. Confira os campos e tente novamente.",true);
  }finally{btn.disabled=false;}
+}
+function clearReplyPreview(){
+ replyProposal=null;replyKey="";
+ el("replyPreviewWrap").hidden=true;
+ el("sendReplyApi").disabled=false;
+ text("replyFeedback","");
+}
+async function loadReplyHistory(protocol){
+ const history=el("replyHistory");history.replaceChildren();history.append(make("p","","Consultando histórico..."));
+ try{
+  const result=await call("/customer/history?protocol="+encodeURIComponent(protocol));
+  if(selected!==protocol)return;
+  history.replaceChildren();
+  if(!result.entries?.length){history.append(make("p","","Nenhum retorno enviado pela API nesta ordem."));return;}
+  const states={accepted:"Aceito pela YCloud (entrega não confirmada)",rejected:"Rejeitado pela API",unknown:"Envio incerto: conferir no WhatsApp",sending:"Processamento pendente"};
+  const labels={retorno:"Retorno",orcamento:"Orçamento",agendamento:"Agendamento",andamento:"Andamento"};
+  for(const entry of result.entries){
+   const p=make("div","reply-history-entry");
+   p.append(make("strong","",labels[entry.kind]||entry.kind),make("span","",states[entry.status]||entry.status),make("small","",dateText(entry.created_at)));
+   history.append(p);
+  }
+ }catch(e){if(selected===protocol)history.replaceChildren(make("p","","Histórico indisponível no momento."));}
+}
+function pendingEdit(o){
+ return el("editStatus").value!==(o.operation_status||"novo")||
+  el("editDate").value!==localDate(o.appointment_at)||
+  (el("editAmount").value?Number(el("editAmount").value):null)!==(o.estimate_amount===null||o.estimate_amount===undefined?null:Number(o.estimate_amount));
+}
+function replyError(err){
+ const map={valor_nao_informado:"Preencha e salve o valor do orçamento antes de preparar a mensagem.",data_nao_informada:"Defina e salve uma data e horário antes de preparar a proposta.",telefone_do_cliente_invalido:"O telefone deste pedido não está válido para o WhatsApp. Confira o cadastro.",janela_de_atendimento_encerrada:"A janela para envio pela API terminou. Abra o WhatsApp Business para enviar manualmente.",dados_alterados_revisar_proposta:"A ordem foi alterada. Atualize a Central e gere uma nova prévia.",envio_incerto_nao_repetir:"Envio incerto. Confira a conversa do cliente antes de tentar novamente para evitar duplicidade.",provedor_rejeitou_mensagem:"A YCloud recusou a mensagem. Você pode enviá-la pelo WhatsApp Business."};
+ return map[err?.message]||"Falha na operação. Confira os dados e tente novamente.";
+}
+async function previewCustomerReply(){
+ const o=allOrders.find(x=>x.protocol===selected);
+ if(!o)return;
+ const feedback=el("replyFeedback");
+ if(pendingEdit(o)){el("replyPreviewWrap").hidden=false;text("replyNotice","Salve as alterações de data, status ou valor antes de preparar a mensagem.");text("replyPreview","");text("replyFeedback","");el("sendReplyApi").hidden=true;el("sendReplyManual").hidden=true;return;}
+ const btn=el("previewReply");btn.disabled=true;
+ try{
+  const reply=await call("/customer/preview",{method:"POST",headers:{"x-csrf-token":csrf},body:JSON.stringify({protocol:o.protocol,kind:el("replyKind").value,extra:el("customerExtra").value})});
+  if(selected!==o.protocol)return;
+  replyProposal=reply;
+  replyKey=crypto.randomUUID();
+  el("replyPreviewWrap").hidden=false;
+  text("replyPreview",reply.message);
+  text("replyNotice",reply.notice);
+  text("replyFeedback","");
+  const api=el("sendReplyApi");
+  api.hidden=!reply.eligible;api.disabled=false;
+  const manual=el("sendReplyManual");
+  manual.hidden=false;
+  manual.href="https://wa.me/"+reply.phone+"?text="+encodeURIComponent(reply.message);
+ }catch(err){
+  el("replyPreviewWrap").hidden=false;
+  text("replyPreview","");
+  text("replyNotice",replyError(err));
+  el("sendReplyApi").hidden=true;el("sendReplyManual").hidden=true;
+  replyProposal=null;
+ }finally{btn.disabled=false;}
+}
+async function sendCustomerReply(){
+ if(!replyProposal||!replyKey||!replyProposal.eligible)return;
+ if(!confirm("Você autoriza o envio desta mensagem ao cliente pelo WhatsApp agora?"))return;
+ const btn=el("sendReplyApi");
+ btn.disabled=true;btn.textContent="Enviando...";
+ try{
+  const r=await call("/customer/send",{method:"POST",headers:{"x-csrf-token":csrf},body:JSON.stringify({protocol:replyProposal.protocol,kind:replyProposal.kind,extra:el("customerExtra").value,requestKey:replyKey,expectedUpdatedAt:replyProposal.updatedAt})});
+  if(r.status==="accepted"){
+   text("replyFeedback","Mensagem aceita pela YCloud. Entrega ao cliente ainda não confirmada. O robô permanecerá em modo humano nesta conversa.");
+   btn.hidden=true;el("sendReplyManual").hidden=true;
+   void loadReplyHistory(replyProposal.protocol);
+  }else{text("replyFeedback","Essa solicitação já foi registrada ("+r.status+"). Verifique o histórico antes de reenviar.");}
+ }catch(err){
+  text("replyFeedback",replyError(err));
+  if(err.status===409||err.status===502){btn.hidden=true;}
+  // When API outcome is uncertain, do not automatically retry.
+ }finally{btn.disabled=false;btn.textContent="Autorizar e enviar agora";}
 }
 function openPassword(){
  el("passwordCover").hidden=false;
@@ -183,5 +264,12 @@ document.addEventListener("DOMContentLoaded",()=>{
  const nav={navOverview:"todos",navOrders:"todos",navCalendar:"agendado",navQuotes:"orcamento"};
  Object.entries(nav).forEach(([id,value])=>el(id).addEventListener("click",()=>{setNav(id);setFilter(value);if(id!=="navOverview")el("ordersSection").scrollIntoView({behavior:"smooth"});else window.scrollTo({top:0,behavior:"smooth"});}));
  el("orderForm").addEventListener("submit",saveOrder);
+ el("previewReply").addEventListener("click",previewCustomerReply);
+ el("sendReplyApi").addEventListener("click",sendCustomerReply);
+ el("sendReplyManual").addEventListener("click",()=>{
+   if(replyProposal){text("replyFeedback","Conversa aberta com a mensagem pronta. Confira e toque em enviar dentro do WhatsApp Business.");el("sendReplyApi").disabled=true;}
+ });
+ el("replyKind").addEventListener("change",clearReplyPreview);
+ el("customerExtra").addEventListener("input",clearReplyPreview);
  void init();
 });
