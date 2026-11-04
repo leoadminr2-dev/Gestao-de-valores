@@ -2,7 +2,7 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {advance,price} from "./bot.mjs";
 const empty={stage:"menu",mode:"bot",data:{}};
-test("boas-vindas não anunciam preços",()=>{const r=advance(empty,{text:"olá"});assert.match(r.reply,/Como posso ajudar/);assert.doesNotMatch(r.reply,/R\$\s*\d/);});
+test("boas-vindas não anunciam preços",()=>{const r=advance(empty,{text:"olá"});assert.match(r.reply,/Como podemos ajudar/);assert.doesNotMatch(r.reply,/R\$\s*\d/);});
 test("consultas explícitas mostram somente valores iniciais",()=>{assert.match(price("preço limpeza"),/R\$ 280/);assert.match(price("troca compressor"),/R\$ 550/);});
 test("solicitação exige consentimento",()=>{
  let r=advance(empty,{text:"1"});assert.equal(r.stage,"nome");
