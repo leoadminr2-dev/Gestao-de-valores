@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import pg from "pg";
 import {advance} from "./bot.mjs";
 import {appReplyPhones} from "./coexistence.mjs";
+import {verifyYCloudSignature,relevantYCloudEvent} from "./ycloud.mjs";
 
 const DB_URL=process.env.DATABASE_URL||"";
 const APP_SECRET=process.env.WHATSAPP_APP_SECRET||"";
@@ -11,9 +12,14 @@ const ACCESS_TOKEN=process.env.WHATSAPP_ACCESS_TOKEN||"";
 const PHONE_NUMBER_ID=process.env.WHATSAPP_PHONE_NUMBER_ID||"";
 const WIX_CLIENT_ID=process.env.WIX_CLIENT_ID||"";
 const API_VERSION=process.env.GRAPH_API_VERSION||"v26.0";
+const YCLOUD_WEBHOOK_SECRET=process.env.YCLOUD_WEBHOOK_SECRET||"";
+const YCLOUD_API_KEY=process.env.YCLOUD_API_KEY||"";
+const YCLOUD_SENDER_NUMBER=process.env.YCLOUD_SENDER_NUMBER||"";
+const YCLOUD_AUTOREPLY_ENABLED=process.env.YCLOUD_AUTOREPLY_ENABLED==="true";
 const PORT=Number(process.env.PORT||3000);
 const pool=new pg.Pool({connectionString:DB_URL,max:4,idleTimeoutMillis:10000,connectionTimeoutMillis:10000});
 const metaReady=Boolean(APP_SECRET&&VERIFY_TOKEN&&ACCESS_TOKEN&&PHONE_NUMBER_ID);
+const ycloudReady=Boolean(YCLOUD_WEBHOOK_SECRET&&YCLOUD_API_KEY&&YCLOUD_SENDER_NUMBER&&YCLOUD_AUTOREPLY_ENABLED);
 let processing=false;
 
 function json(res,status,data){
@@ -70,7 +76,7 @@ async function handleInbound(message){
   try{await db.query("ROLLBACK");}catch{}
   throw err;
  }finally{db.release();}
- if(!duplicate)await tick();
+ // The durable outbound queue is drained by the provider event worker/timer.
 }
 async function handleManualReply(phone){
  // A human reply from the Business App pauses bot responses for this customer.
@@ -85,6 +91,27 @@ async function handleManualReply(phone){
   try{await db.query("ROLLBACK")}catch{}
   throw error;
  }finally{db.release()}
+}
+async function receiveYCloudEvent(event){
+ const saved=await pool.query("INSERT INTO wa_provider_events(event_id,event_type,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING event_id",[event.id,event.kind,JSON.stringify(event)]);
+ return saved.rowCount===1;
+}
+async function processYCloudEvents(){
+ if(!ycloudReady)return;
+ for(let i=0;i<20;i++){
+  const claim=await pool.query("UPDATE wa_provider_events SET lease_until=now()+interval '90 seconds',attempts=attempts+1 WHERE event_id=(SELECT event_id FROM wa_provider_events WHERE processed_at IS NULL AND attempts<20 AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING event_id,payload");
+  if(!claim.rowCount)break;
+  const event=claim.rows[0].payload;
+  try{
+   if(event.kind==="manual_reply"){await handleManualReply(event.phone);}
+   else if(event.kind==="incoming"){
+    await handleInbound({from:event.phone,id:"ycloud-"+event.messageId,type:event.messageType,text:{body:event.text||""}});
+   }
+   await pool.query("UPDATE wa_provider_events SET processed_at=now(),lease_until=NULL,last_error=NULL WHERE event_id=$1",[claim.rows[0].event_id]);
+  }catch(err){
+   await pool.query("UPDATE wa_provider_events SET lease_until=now()+interval '2 minutes',last_error=$2 WHERE event_id=$1",[claim.rows[0].event_id,String(err?.code||err?.message||"ERROR").slice(0,100)]);
+  }
+ }
 }
 async function wixInsert(order){
  if(!WIX_CLIENT_ID)throw new Error("WIX_CLIENT_ID_NOT_CONFIGURED");
@@ -138,6 +165,17 @@ async function syncOrders(){
  }
 }
 async function sendMessage(phone,message){
+ if(ycloudReady){
+  const to="+"+phone;
+  const response=await fetch("https://api.ycloud.com/v2/whatsapp/messages",{
+   method:"POST",
+   headers:{"X-API-Key":YCLOUD_API_KEY,"content-type":"application/json"},
+   body:JSON.stringify({from:YCLOUD_SENDER_NUMBER,to,type:"text",text:{body:message}}),
+   signal:AbortSignal.timeout(16000)
+  });
+  if(!response.ok)throw new Error("YCLOUD_SEND_"+response.status);
+  return;
+ }
  const url="https://graph.facebook.com/"+API_VERSION+"/"+encodeURIComponent(PHONE_NUMBER_ID)+"/messages";
  const response=await fetch(url,{
   method:"POST",
@@ -148,7 +186,7 @@ async function sendMessage(phone,message){
  if(!response.ok)throw new Error("META_SEND_"+response.status);
 }
 async function sendOutbox(){
- if(!metaReady)return;
+ if(!metaReady&&!ycloudReady)return;
  for(let i=0;i<10;i++){
   const picked=await pool.query("UPDATE wa_outbound SET lease_until=now()+interval '90 seconds',attempts=attempts+1 WHERE id=(SELECT id FROM wa_outbound WHERE sent_at IS NULL AND cancelled_at IS NULL AND attempts<15 AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING id,phone,message");
   if(picked.rowCount===0)break;
@@ -173,7 +211,7 @@ async function sendOutbox(){
 async function tick(){
  if(processing)return;
  processing=true;
- try{await syncOrders();await sendOutbox();}
+ try{await processYCloudEvents();await syncOrders();await sendOutbox();}
  catch(e){console.error("FALHA_FILA",String(e?.code||e?.message||"ERR").slice(0,100));}
  finally{processing=false;}
 }
@@ -181,7 +219,23 @@ const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url||"/","http://localhost");
   if(req.method==="GET"&&url.pathname==="/healthz"){
-   return json(res,200,{service:"leonardo-refrigeracao-whatsapp",status:metaReady?"configured":"awaiting_meta_onboarding",database:DB_URL?"configured":"missing",wix:WIX_CLIENT_ID?"configured":"missing",graphApi:API_VERSION});
+   return json(res,200,{service:"leonardo-refrigeracao-whatsapp",status:metaReady?"configured":"awaiting_meta_onboarding",database:DB_URL?"configured":"missing",wix:WIX_CLIENT_ID?"configured":"missing",graphApi:API_VERSION,yCloud:ycloudReady?"enabled":YCLOUD_WEBHOOK_SECRET?"paused":"awaiting_webhook_secret"});
+  }
+  if(url.pathname==="/webhook/ycloud"){
+   if(req.method==="GET")return json(res,200,{service:"leonardo-refrigeracao-whatsapp",provider:"ycloud",state:ycloudReady?"ready":"paused"});
+   if(req.method!=="POST")return json(res,405,{error:"method_not_allowed"});
+   if(!YCLOUD_WEBHOOK_SECRET)return json(res,503,{error:"ycloud_secret_not_configured"});
+   const raw=await readBody(req);
+   if(!verifyYCloudSignature(raw,String(req.headers["ycloud-signature"]||""),YCLOUD_WEBHOOK_SECRET))return json(res,403,{error:"invalid_ycloud_signature"});
+   const payload=JSON.parse(raw.toString("utf8"));
+   const event=relevantYCloudEvent(payload,YCLOUD_SENDER_NUMBER);
+   if(!event)return json(res,200,{ok:true,ignored:true});
+   // Before final controlled validation, never process or store customer messages.
+   if(!ycloudReady)return json(res,200,{ok:true,paused:true});
+   const isNew=await receiveYCloudEvent(event);
+   json(res,200,{ok:true,queued:isNew});
+   if(isNew)setImmediate(()=>{void tick()});
+   return;
   }
   if(url.pathname!=="/webhook/whatsapp")return json(res,404,{error:"not_found"});
   if(req.method==="GET"){
@@ -212,7 +266,9 @@ const server=http.createServer(async(req,res)=>{
     }
    }
   }
-  return json(res,200,{ok:true,processed});
+  json(res,200,{ok:true,processed});
+  if(processed)setImmediate(()=>{void tick()});
+  return;
  }catch(err){
   console.error("WEBHOOK_ERROR",String(err?.code||err?.message||"ERR").slice(0,100));
   return json(res,err?.status===413?413:500,{error:err?.status===413?"payload_too_large":"temporary_error"});
@@ -221,7 +277,7 @@ const server=http.createServer(async(req,res)=>{
 server.listen(PORT,"0.0.0.0",()=>console.log("Refrigeracao WhatsApp webhook initialized on port "+PORT+"; "+(metaReady?"META_CONFIGURED":"AWAITING_META")));
 // Conservar cotas gratuitas: sem sondagens ao banco antes do vínculo oficial Meta.
 // Durante operação, a fila é acionada a cada mensagem recebida e sondada a cada 10 min.
-if(metaReady){
+if(metaReady||ycloudReady){
   setTimeout(()=>{void tick();},5000).unref();
   setInterval(()=>{void tick();},10*60*1000).unref();
 }
