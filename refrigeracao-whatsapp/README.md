@@ -58,3 +58,20 @@ Documentação YCloud:
 - https://docs.ycloud.com/en/documentation/developer/webhooks
 - https://nndocs.ycloud.com/reference/webhook-events-payloads
 - https://nndocs.ycloud.com/reference/whatsapp_message-send
+
+
+## Atendimento seletivo por palavras-chave (04/11/2026)
+O webhook possui filtro de intenção comercial antes de gravar o texto de uma mensagem de cliente na fila. A mensagem "oi", assuntos particulares ou referência casual a eletrodomésticos não disparam o atendimento. Exemplos de gatilhos: "refrigeração", "geladeira", "ar-condicionado", "manutenção", "orçamento", "preciso de limpeza profunda", "minha geladeira não está gelando". A expressão "minha geladeira está cheia de comida" não deve ativar.
+
+Para garantir que familiares ou amigos específicos nunca acionem o robô, configurar **apenas no ambiente privado do Render**:
+
+- WHATSAPP_PRIVATE_PHONES: números internacionais com DDI e DDD, separados por vírgulas (exemplo **fictício**: +5521999990001,+5521999990002). Não colocar os números reais neste arquivo, nem em commits.
+- Enquanto a lista não for definida, não é possível garantir proteção absoluta dos contatos salvos no aplicativo: a API não tem acesso direto à agenda pessoal do celular.
+- Quando for adicionada uma entrada, o filtro impede novas respostas e cancela respostas pendentes ao telefone protegido.
+- O bot só permanece ativo na conversa comercial durante 24 horas desde a última mensagem processada; depois exige um novo pedido comercial.
+- Uma resposta manual enviada pelo responsável transfere a conversa para modo humano. Na conversa comercial ativa, a palavra MENU a reativa.
+- Imagens ou saudações iniciais sem uma intenção comercial não ativam o robô.
+
+**Segurança de implantação:** manter YCLOUD_TEST_MODE=true durante a validação e não habilitar a operação pública sem verificar YCloud, webhook, mensagem manual, proteção dos contatos e custo de mensagens.
+
+Testes automatizados: selective.test.mjs.
