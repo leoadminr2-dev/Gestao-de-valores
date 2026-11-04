@@ -118,7 +118,8 @@ async function receiveYCloudEvent(event){
  // Verificar intenção antes de salvar o payload, preservando mensagens particulares.
  if(event.kind==="incoming"){
   const previous=await pool.query("SELECT stage,mode,data,last_message_at FROM wa_sessions WHERE phone=$1",[event.phone]);
-  if(!shouldHandleMessage({phone:event.phone,messageType:event.messageType,text:event.text,session:previous.rows[0]||null,protectedPhones:WHATSAPP_PRIVATE_PHONES}))return false;
+  const controlledTest=YCLOUD_TEST_MODE&&event.messageType==="text"&&String(event.text||"").trim().toUpperCase()==="TESTE LMR";
+  if(!controlledTest&&!shouldHandleMessage({phone:event.phone,messageType:event.messageType,text:event.text,session:previous.rows[0]||null,protectedPhones:WHATSAPP_PRIVATE_PHONES}))return false;
  }
  if(isProtectedPhone(event.phone,WHATSAPP_PRIVATE_PHONES))return false;
  const saved=await pool.query("INSERT INTO wa_provider_events(event_id,event_type,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING event_id",[event.id,event.kind,JSON.stringify(event)]);
