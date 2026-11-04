@@ -12,6 +12,10 @@ for (const word of [
 
 for (const [message, expected] of [
   ["Quero instalar um ar-condicionado split", true],
+  ["Geladeira?", true],
+  ["Orçamento!", true],
+  ["Ar-condicionado?", true],
+  ["Quanto cobra para limpar meu ar-condicionado?", true],
   ["Minha geladeira não está gelando", true],
   ["Preciso de orçamento para manutenção", true],
   ["Quero um contrato de manutenção para minha empresa", true],
