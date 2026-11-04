@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import {readFile} from "node:fs/promises";
+import {createCustomerReplyService} from "./client-send.mjs";
 
 const SESSION_SECRET=process.env.LMR_ADMIN_SESSION_SECRET||"";
 const active=SESSION_SECRET.length>=32;
@@ -76,7 +77,8 @@ function cleanAmount(value){
  return Math.round(n*100)/100;
 }
 export function dashboardConfigured(){return active;}
-export function createDashboard(pool){
+export function createDashboard(pool,replyOptions={}){
+ const replies=createCustomerReplyService(pool,replyOptions);
  return async function dashboard(req,res,url){
   if(url.pathname!=="/painel"&&!url.pathname.startsWith("/painel/"))return false;
   security(res);
@@ -126,6 +128,24 @@ export function createDashboard(pool){
    await pool.query("UPDATE ops_admin_credentials SET salt=$1,password_hash=$2,auth_version=$3,changed_at=now() WHERE id=1 AND auth_version=$4",[salt,passwordHash,version,stored.auth_version]);
    res.setHeader("set-cookie",COOKIE+"=; HttpOnly; Secure; SameSite=Lax; Path=/painel; Max-Age=0");
    answer(res,200,{ok:true,message:"Senha atualizada. Entre novamente."});return true;
+  }
+  if(url.pathname==="/painel/api/customer/history"&&req.method==="GET"){
+   try{const entries=await replies.history(url.searchParams.get("protocol")||"");answer(res,200,{entries});}
+   catch(e){answer(res,e.status||500,{error:e.message||"erro_historico"});}
+   return true;
+  }
+  if((url.pathname==="/painel/api/customer/preview"||url.pathname==="/painel/api/customer/send")&&req.method==="POST"){
+   if(!equal(req.headers["x-csrf-token"],auth.csrf)){answer(res,403,{error:"requisicao_nao_autorizada"});return true;}
+   let input;try{input=await bodyJSON(req)}catch{answer(res,400,{error:"dados_invalidos"});return true;}
+   try{
+    if(url.pathname.endsWith("/preview")){
+     const proposal=await replies.preview(input);answer(res,200,proposal);
+    }else{
+     const outcome=await replies.send(input);
+     answer(res,200,outcome);
+    }
+   }catch(e){answer(res,e.status||500,{error:String(e.message||"erro_envio")});}
+   return true;
   }
   if(url.pathname==="/painel/api/overview"&&req.method==="GET"){
    const [metrics,data]=await Promise.all([
