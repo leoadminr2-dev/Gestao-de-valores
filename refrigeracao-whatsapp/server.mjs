@@ -2,6 +2,7 @@ import http from "node:http";
 import crypto from "node:crypto";
 import pg from "pg";
 import {advance} from "./bot.mjs";
+import {shouldHandleMessage,isProtectedPhone} from "./selective.mjs";
 import {appReplyPhones} from "./coexistence.mjs";
 import {verifyYCloudSignature,relevantYCloudEvent} from "./ycloud.mjs";
 import {createDashboard} from "./dashboard.mjs";
@@ -16,6 +17,8 @@ const API_VERSION=process.env.GRAPH_API_VERSION||"v26.0";
 const YCLOUD_WEBHOOK_SECRET=process.env.YCLOUD_WEBHOOK_SECRET||"";
 const YCLOUD_API_KEY=process.env.YCLOUD_API_KEY||"";
 const YCLOUD_SENDER_NUMBER=process.env.YCLOUD_SENDER_NUMBER||"";
+// Números pessoais ficam no Render, nunca no código/repositório.
+const WHATSAPP_PRIVATE_PHONES=process.env.WHATSAPP_PRIVATE_PHONES||"";
 const YCLOUD_AUTOREPLY_ENABLED=process.env.YCLOUD_AUTOREPLY_ENABLED==="true";
 // Guardrail: real customers remain unaffected until explicit production release.
 const YCLOUD_TEST_MODE=process.env.YCLOUD_TEST_MODE!=="false";
@@ -65,7 +68,14 @@ async function handleInbound(message){
   const inserted=await db.query("INSERT INTO wa_processed_messages (message_id,phone) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING message_id",[messageId,phone]);
   if(inserted.rowCount===0){duplicate=true;await db.query("COMMIT");return;}
   const current=sess.rows[0];
-  const move=advance({stage:current.stage,mode:current.mode,data:current.data},incoming);
+  if(!shouldHandleMessage({phone,messageType:incoming.type,text:incoming.text,session:current,protectedPhones:WHATSAPP_PRIVATE_PHONES})){
+   await db.query("COMMIT");
+   return; // Conversa privada: não gerar resposta, pedido ou conteúdo na fila.
+  }
+  const move=advance({stage:current.stage,mode:current.mode,data:{...current.data,commercialActivated:true}},incoming);
+  if(move.mode==="bot"&&!/^(cancelar|desistir|cancela)$/.test(String(incoming.text||"").trim().toLowerCase())){
+   move.data={...move.data,commercialActivated:true};
+  }
   // A confirmação da transferência humana deve chegar antes de pausar o robô.
   // Usamos JSONB como estado temporário, preservando o CHECK bot/human do banco.
   const enteringHuman=current.mode==="bot"&&move.mode==="human"&&Boolean(move.reply);
@@ -105,6 +115,12 @@ async function handleManualReply(phone){
  }finally{db.release()}
 }
 async function receiveYCloudEvent(event){
+ // Verificar intenção antes de salvar o payload, preservando mensagens particulares.
+ if(event.kind==="incoming"){
+  const previous=await pool.query("SELECT stage,mode,data,last_message_at FROM wa_sessions WHERE phone=$1",[event.phone]);
+  if(!shouldHandleMessage({phone:event.phone,messageType:event.messageType,text:event.text,session:previous.rows[0]||null,protectedPhones:WHATSAPP_PRIVATE_PHONES}))return false;
+ }
+ if(isProtectedPhone(event.phone,WHATSAPP_PRIVATE_PHONES))return false;
  const saved=await pool.query("INSERT INTO wa_provider_events(event_id,event_type,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING event_id",[event.id,event.kind,JSON.stringify(event)]);
  return saved.rowCount===1;
 }
@@ -119,7 +135,7 @@ async function processYCloudEvents(){
     const optedIn=event.kind==="incoming" && event.messageType==="text" && String(event.text||"").trim().toUpperCase()==="TESTE LMR";
     if(optedIn){
      await pool.query("INSERT INTO wa_test_allowlist(phone) VALUES($1) ON CONFLICT DO NOTHING",[event.phone]);
-     event.text="menu";
+     event.text="refrigeração"; // Comando de teste aciona a nova porta comercial.
     }else{
      const allowed=await pool.query("SELECT 1 FROM wa_test_allowlist WHERE phone=$1",[event.phone]);
      if(!allowed.rowCount){
@@ -219,6 +235,10 @@ async function sendOutbox(){
   const picked=await pool.query("UPDATE wa_outbound SET lease_until=now()+interval '90 seconds',attempts=attempts+1 WHERE id=(SELECT id FROM wa_outbound WHERE sent_at IS NULL AND cancelled_at IS NULL AND attempts<15 AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING id,phone,message");
   if(picked.rowCount===0)break;
   const row=picked.rows[0];
+  if(isProtectedPhone(row.phone,WHATSAPP_PRIVATE_PHONES)){
+   await pool.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='PRIVATE_CONTACT' WHERE id=$1",[row.id]);
+   continue;
+  }
   const last=await pool.query("SELECT last_message_at,mode,data FROM wa_sessions WHERE phone=$1",[row.phone]);
   if(last.rows[0]?.mode==="human"){
    await pool.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE id=$1",[row.id]);
