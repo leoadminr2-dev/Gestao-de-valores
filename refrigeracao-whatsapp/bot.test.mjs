@@ -12,3 +12,11 @@ test("solicitação exige consentimento",()=>{
 });
 test("humano impede respostas até MENU",()=>{let r=advance(empty,{text:"5"});assert.equal(r.mode,"human");r=advance(r,{text:"ajuda"});assert.equal(r.reply,null);r=advance(r,{text:"menu"});assert.equal(r.mode,"bot");});
 test("cancelamento não cria OS",()=>{const r=advance({stage:"confirmar",mode:"bot",data:{}},{text:"cancelar"});assert.equal(r.order,undefined);});
+
+import {appReplyPhones} from "./coexistence.mjs";
+test("ecos do WhatsApp Business transferem para humano apenas no número correto",()=>{
+ const echo={field:"smb_message_echoes",value:{metadata:{phone_number_id:"12345"},message_echoes:[{from:"5521970338222",to:"5521999999999",type:"text",text:{body:"Eu respondo."}}]}};
+ assert.deepEqual(appReplyPhones(echo,"12345"),["5521999999999"]);
+ assert.deepEqual(appReplyPhones(echo,"99999"),[]);
+ assert.deepEqual(appReplyPhones({...echo,field:"messages"},"12345"),[]);
+});
