@@ -1,10 +1,9 @@
 import crypto from "node:crypto";
 import {readFile} from "node:fs/promises";
 
-const SALT=process.env.LMR_ADMIN_SALT||"";
-const PASSWORD_HASH=process.env.LMR_ADMIN_HASH||"";
 const SESSION_SECRET=process.env.LMR_ADMIN_SESSION_SECRET||"";
-const active=Boolean(SALT&&PASSWORD_HASH&&SESSION_SECRET);
+const active=SESSION_SECRET.length>=32;
+const MIN_PASSWORD_LENGTH=14;
 const failures=new Map();
 const COOKIE="lmr_admin";
 const ttl=12*60*60*1000;
@@ -25,14 +24,26 @@ function equal(a,b){
 function sign(raw){
  return crypto.createHmac("sha256",SESSION_SECRET).update(raw).digest("base64url");
 }
-function session(req){
+async function credentials(pool){
+ const result=await pool.query("SELECT salt,password_hash,auth_version FROM ops_admin_credentials WHERE id=1");
+ return result.rows[0]||null;
+}
+function validPassword(password,cred){
+ if(!cred||!password||password.length>256)return false;
+ const digest=crypto.pbkdf2Sync(password,Buffer.from(cred.salt,"hex"),240000,32,"sha256").toString("hex");
+ return equal(digest,cred.password_hash);
+}
+async function session(req,pool){
  if(!active)return null;
  const v=cookieValue(req);const i=v.lastIndexOf(".");
  if(i<=0)return null;
  const raw=v.slice(0,i),sig=v.slice(i+1);
  if(!equal(sig,sign(raw)))return null;
- try {const payload=JSON.parse(Buffer.from(raw,"base64url").toString("utf8"));
-  return payload.exp>Date.now()&&typeof payload.csrf==="string"?payload:null;
+ try {
+  const payload=JSON.parse(Buffer.from(raw,"base64url").toString("utf8"));
+  if(!(payload.exp>Date.now()&&typeof payload.csrf==="string"&&typeof payload.version==="string"))return null;
+  const current=await pool.query("SELECT auth_version FROM ops_admin_credentials WHERE id=1");
+  return current.rows[0]?.auth_version===payload.version?payload:null;
  }catch{return null;}
 }
 function authorizeOrigin(req){
@@ -52,8 +63,8 @@ async function bodyJSON(req){
  for await(const c of req){count+=c.length;if(count>20000)throw new Error("LIMITE");chunks.push(c);}
  return JSON.parse(Buffer.concat(chunks).toString("utf8")||"{}");
 }
-function setSession(res){
- const payload={exp:Date.now()+ttl,csrf:crypto.randomBytes(20).toString("base64url")};
+function setSession(res,version){
+ const payload={exp:Date.now()+ttl,csrf:crypto.randomBytes(20).toString("base64url"),version};
  const raw=Buffer.from(JSON.stringify(payload)).toString("base64url");
  res.setHeader("set-cookie",COOKIE+"="+raw+"."+sign(raw)+"; HttpOnly; Secure; SameSite=Lax; Path=/painel; Max-Age=43200");
  return payload;
@@ -88,27 +99,42 @@ export function createDashboard(pool){
    if(attempt&&attempt.count>=8){answer(res,429,{error:"muitas_tentativas"});return true;}
    let input;try{input=await bodyJSON(req)}catch{answer(res,400,{error:"dados_invalidos"});return true;}
    const pwd=String(input.password||"");
-   const calc=crypto.pbkdf2Sync(pwd,Buffer.from(SALT,"hex"),240000,32,"sha256").toString("hex");
-   if(!equal(calc,PASSWORD_HASH)){
+   const stored=await credentials(pool);
+   if(!validPassword(pwd,stored)){
     failures.set(client,{since:attempt?.since||now,count:(attempt?.count||0)+1});
     answer(res,401,{error:"senha_incorreta"});return true;
    }
    failures.delete(client);
-   const s=setSession(res);answer(res,200,{ok:true,csrf:s.csrf});return true;
+   const s=setSession(res,stored.auth_version);answer(res,200,{ok:true,csrf:s.csrf});return true;
   }
-  const auth=session(req);
+  const auth=await session(req,pool);
   if(!auth){answer(res,401,{error:"acesso_restrito"});return true;}
   if(url.pathname==="/painel/api/me"&&req.method==="GET"){
    answer(res,200,{ok:true,csrf:auth.csrf});return true;
   }
+  if(url.pathname==="/painel/api/password"&&req.method==="POST"){
+   if(!equal(req.headers["x-csrf-token"],auth.csrf)){answer(res,403,{error:"requisicao_nao_autorizada"});return true;}
+   let input;try{input=await bodyJSON(req)}catch{answer(res,400,{error:"dados_invalidos"});return true;}
+   const oldPwd=String(input.currentPassword||"");
+   const nextPwd=String(input.newPassword||"");
+   if(nextPwd.length<MIN_PASSWORD_LENGTH||nextPwd.length>128||nextPwd===oldPwd){answer(res,422,{error:"senha_nova_invalida"});return true;}
+   const stored=await credentials(pool);
+   if(!validPassword(oldPwd,stored)){answer(res,401,{error:"senha_atual_incorreta"});return true;}
+   const salt=crypto.randomBytes(16).toString("hex");
+   const passwordHash=crypto.pbkdf2Sync(nextPwd,Buffer.from(salt,"hex"),240000,32,"sha256").toString("hex");
+   const version=crypto.randomBytes(16).toString("hex");
+   await pool.query("UPDATE ops_admin_credentials SET salt=$1,password_hash=$2,auth_version=$3,changed_at=now() WHERE id=1 AND auth_version=$4",[salt,passwordHash,version,stored.auth_version]);
+   res.setHeader("set-cookie",COOKIE+"=; HttpOnly; Secure; SameSite=Lax; Path=/painel; Max-Age=0");
+   answer(res,200,{ok:true,message:"Senha atualizada. Entre novamente."});return true;
+  }
   if(url.pathname==="/painel/api/overview"&&req.method==="GET"){
    const [metrics,data]=await Promise.all([
     pool.query("SELECT operation_status AS status, count(*)::int AS total FROM wa_orders GROUP BY operation_status"),
-    pool.query("SELECT protocol,phone,payload,created_at,updated_at,sync_status,operation_status,appointment_at,estimate_amount,admin_notes FROM wa_orders ORDER BY created_at DESC LIMIT 200")
+    pool.query("SELECT protocol,phone,payload,created_at,updated_at,sync_status,operation_status,appointment_at,estimate_amount,admin_notes,source,wix_item_id,wix_update_pending,wix_update_error FROM wa_orders ORDER BY created_at DESC LIMIT 500")
    ]);
-   answer(res,200,{metrics:metrics.rows,orders:data.rows,limited:data.rowCount===200});return true;
+   answer(res,200,{metrics:metrics.rows,orders:data.rows,limited:data.rowCount===500});return true;
   }
-  const match=url.pathname.match(/^\/painel\/api\/ordens\/(WA-[A-Z0-9-]{12,30})$/);
+  const match=url.pathname.match(/^\/painel\/api\/ordens\/((?:WA|LMR)-[A-Z0-9-]{8,40})$/);
   if(match&&req.method==="PATCH"){
    if(!equal(req.headers["x-csrf-token"],auth.csrf)){answer(res,403,{error:"requisicao_nao_autorizada"});return true;}
    let input;try{input=await bodyJSON(req)}catch{answer(res,400,{error:"dados_invalidos"});return true;}
@@ -119,7 +145,7 @@ export function createDashboard(pool){
    if(input.appointment){date=new Date(input.appointment);if(Number.isNaN(date.getTime())){answer(res,422,{error:"data_invalida"});return true;}}
    let amount;try{amount=cleanAmount(input.amount)}catch{answer(res,422,{error:"valor_invalido"});return true;}
    const result=await pool.query(
-    "UPDATE wa_orders SET operation_status=$2,appointment_at=$3,estimate_amount=$4,admin_notes=$5,updated_at=now() WHERE protocol=$1 RETURNING protocol,operation_status,appointment_at,estimate_amount,admin_notes",
+    "UPDATE wa_orders SET operation_status=$2,appointment_at=$3,estimate_amount=$4,admin_notes=$5,wix_update_pending=(wix_item_id IS NOT NULL),wix_update_error=NULL,updated_at=now() WHERE protocol=$1 RETURNING protocol,operation_status,appointment_at,estimate_amount,admin_notes,wix_update_pending",
     [match[1],input.status,date,amount,note]
    );
    if(!result.rowCount){answer(res,404,{error:"ordem_nao_encontrada"});return true;}
