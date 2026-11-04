@@ -27,7 +27,7 @@ function fakeDb({lastInbound=new Date().toISOString()}={}){
     const x=history.get(args[0]);return {rows:x?[x]:[],rowCount:x?1:0};
    }
    if(sql.includes("UPDATE wa_customer_replies")){
-    const x=[...history.values()].find(y=>y.id===args[0]);x.status=args[1];return {rowCount:1};
+    const x=[...history.values()].find(y=>y.id===args[0]);x.status=sql.includes("status='accepted'")?"accepted":args[1];return {rowCount:1};
    }
    if(sql.includes("INSERT INTO wa_sessions")||sql.includes("UPDATE wa_outbound"))return {rows:[],rowCount:1};
    if(sql.includes("FROM wa_customer_replies WHERE protocol"))return {rows:[...history.values()],rowCount:history.size};
