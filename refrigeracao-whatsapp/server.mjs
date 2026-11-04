@@ -4,6 +4,7 @@ import pg from "pg";
 import {advance} from "./bot.mjs";
 import {appReplyPhones} from "./coexistence.mjs";
 import {verifyYCloudSignature,relevantYCloudEvent} from "./ycloud.mjs";
+import {createDashboard} from "./dashboard.mjs";
 
 const DB_URL=process.env.DATABASE_URL||"";
 const APP_SECRET=process.env.WHATSAPP_APP_SECRET||"";
@@ -230,9 +231,11 @@ async function tick(){
  catch(e){console.error("FALHA_FILA",String(e?.code||e?.message||"ERR").slice(0,100));}
  finally{processing=false;}
 }
+const dashboard=createDashboard(pool);
 const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url||"/","http://localhost");
+  if(await dashboard(req,res,url))return;
   if(req.method==="GET"&&url.pathname==="/healthz"){
    return json(res,200,{service:"leonardo-refrigeracao-whatsapp",status:metaReady?"configured":"awaiting_meta_onboarding",database:DB_URL?"configured":"missing",wix:WIX_CLIENT_ID?"configured":"missing",graphApi:API_VERSION,yCloud:ycloudReady?(YCLOUD_TEST_MODE?"test_mode":"enabled"):YCLOUD_WEBHOOK_SECRET?"paused":"awaiting_webhook_secret"});
   }
