@@ -58,7 +58,7 @@ function initialIntent(t, previous={}) {
   // As intenções específicas vêm antes de palavras genéricas como limpeza/manutenção.
   if(t==="6" || /contrato|preventiva|periodic/.test(t))
     return orderFlow("Contrato de manutenção e limpeza",previous,{tipoAtendimento:"Empresarial"});
-  if(t==="5" || /empresarial|para empresa|comercio|escritorio/.test(t))
+  if(t==="5" || /empresarial|\bempresa\b|comercio|escritorio/.test(t))
     return {stage:"empresa_escolha",mode:"bot",data:{...previous,tipoAtendimento:"Empresarial"},reply:BUSINESS_MENU};
   if(t==="4" || /residencial|minha casa|apartamento/.test(t))
     return {stage:"residencial",mode:"bot",data:{...previous,tipoAtendimento:"Residencial"},reply:RESIDENTIAL_MENU};
