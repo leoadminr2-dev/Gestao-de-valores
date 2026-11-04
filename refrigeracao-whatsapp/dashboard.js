@@ -86,7 +86,7 @@ function renderOrders(){
   main.append(line,make("span","order-sub",o.payload?.servico||"Serviço a definir"));
   const meta=make("span","order-meta");
   meta.append(make("span","",o.payload?.bairro||"Bairro não informado"),make("span","",dateText(o.created_at)));
-  main.append(meta);item.append(main);
+  main.append(meta,make("span","source-label",o.source==="site"?"🌐 Atendimento Expresso · Site":"◉ WhatsApp Business"));item.append(main);
   item.addEventListener("click",()=>{
    selected=o.protocol;renderOrders();renderDetail(o);
    if(window.matchMedia("(max-width: 1250px)").matches)el("detailContent").scrollIntoView({behavior:"smooth",block:"start"});
@@ -105,7 +105,7 @@ function renderDetail(o){
  text("detailDistrict",o.payload?.bairro||"Não informado");
  text("detailPreference",o.payload?.preferencia||"A combinar");
  text("detailCreated",dateText(o.created_at));
- text("detailSync",o.sync_status==="synced"?"Recebido no Wix":"Sincronização pendente");
+ text("detailSync",o.wix_update_pending?"Alterações aguardando sincronização":o.wix_update_error?"Erro na atualização Wix":o.sync_status==="synced"?"Sincronizado com Wix":"Sincronização inicial pendente");
  const phone=String(o.phone||"").replace(/\D/g,"");
  const wa=el("detailWhatsApp");wa.href=phone?"https://wa.me/"+phone:"https://wa.me/5521970338222";
  wa.hidden=!phone;
@@ -125,13 +125,39 @@ async function saveOrder(e){
  try{
   const date=el("editDate").value;
   const payload={status:el("editStatus").value,appointment:date?new Date(date).toISOString():null,amount:el("editAmount").value?Number(el("editAmount").value):null,notes:el("editNotes").value};
-  await call("/ordens/"+encodeURIComponent(selected),{method:"PATCH",headers:{"x-csrf-token":csrf},body:JSON.stringify(payload)});
+  const saved=await call("/ordens/"+encodeURIComponent(selected),{method:"PATCH",headers:{"x-csrf-token":csrf},body:JSON.stringify(payload)});
   await refresh();
-  showMessage("Alterações salvas com sucesso.");
+  showMessage(saved.order?.wix_update_pending?"Alterações salvas. Atualização do Wix na próxima sincronização.":"Alterações salvas com sucesso.");
  }catch(err){
   if(err.status===401){showLogin("Sua sessão expirou.");return;}
   showMessage("Falha ao salvar. Confira os campos e tente novamente.",true);
  }finally{btn.disabled=false;}
+}
+function openPassword(){
+ el("passwordCover").hidden=false;
+ el("currentPassword").focus();
+}
+function closePassword(){
+ el("passwordCover").hidden=true;
+ el("passwordForm").reset();
+ text("passwordMessage","");
+}
+async function changePassword(e){
+ e.preventDefault();
+ const oldPwd=el("currentPassword").value;
+ const newPwd=el("newPassword").value;
+ const confirm=el("confirmPassword").value;
+ if(newPwd!==confirm){text("passwordMessage","As novas senhas não coincidem.");return;}
+ if(newPwd.length<14){text("passwordMessage","Use no mínimo 14 caracteres.");return;}
+ const btn=el("passwordSave");btn.disabled=true;btn.textContent="Salvando...";
+ try{
+  await call("/password",{method:"POST",headers:{"x-csrf-token":csrf},body:JSON.stringify({currentPassword:oldPwd,newPassword:newPwd})});
+  csrf="";
+  closePassword();
+  showLogin("Sua senha foi alterada. Entre com a nova senha.");
+ }catch(err){
+  text("passwordMessage",err.message==="senha_atual_incorreta"?"Senha atual incorreta.":err.message==="senha_nova_invalida"?"Escolha uma senha mais longa e diferente.":"Não foi possível salvar. Tente novamente.");
+ }finally{btn.disabled=false;btn.textContent="Trocar senha e encerrar sessões";}
 }
 async function logout(){
  try{await call("/logout",{method:"POST",headers:{"x-csrf-token":csrf},body:"{}"});}catch{}
@@ -145,6 +171,11 @@ document.addEventListener("DOMContentLoaded",()=>{
  });
  el("refreshBtn").addEventListener("click",refresh);
  el("logoutBtn").addEventListener("click",logout);
+ el("passwordOpen").addEventListener("click",openPassword);
+ el("passwordClose").addEventListener("click",closePassword);
+ el("passwordForm").addEventListener("submit",changePassword);
+ el("passwordCover").addEventListener("click",e=>{if(e.target===el("passwordCover"))closePassword();});
+ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!el("passwordCover").hidden)closePassword();});
  el("openAllOrders").addEventListener("click",()=>{setFilter("todos");setNav("navOrders");el("ordersSection").scrollIntoView({behavior:"smooth"});});
  el("searchInput").addEventListener("input",e=>{search=e.target.value.trim().toLocaleLowerCase("pt-BR");renderOrders();});
  el("statusFilter").addEventListener("change",e=>setFilter(e.target.value));
