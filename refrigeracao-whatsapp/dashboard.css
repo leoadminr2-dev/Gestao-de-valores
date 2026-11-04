@@ -23,3 +23,24 @@
 .password-message{font-size:11px;color:#bb4242;line-height:1.4;min-height:16px}
 .password-box .primary{margin-top:4px;white-space:normal}
 @media(max-width:480px){.password-cover{align-items:start}.password-box{padding:23px;margin-top:36px}.password-box .modal-head h2{font-size:19px}}
+
+.customer-response{border-top:1px solid #e4eef1;margin-top:23px;padding-top:24px;display:flex;flex-direction:column;gap:11px}
+.customer-head{margin-bottom:7px}.customer-head h3{font-size:18px;letter-spacing:-.04em;margin:7px 0 8px}.customer-head p{font-size:11px;color:#708995;line-height:1.6}
+.customer-response>label,.customer-response #replyPreviewWrap>label{font-weight:800;font-size:11px;color:#35566c}
+.customer-response select,.customer-response textarea{width:100%;font:inherit;border:1px solid #d6e4e9;background:#fff;border-radius:9px;padding:12px;color:#244759;font-size:12px;resize:vertical}
+.customer-response #replyPreview{min-height:210px;line-height:1.6;background:#f6fafb;color:#183e53;white-space:pre-wrap}
+.customer-response .secondary-action{width:100%;border:1px solid #81cad6;background:#effbfe;border-radius:9px;color:#087e9f;padding:12px 15px;font-size:12px;font-weight:850}
+.customer-response .secondary-action:hover{background:#e1f7fb}
+#replyPreviewWrap{display:flex;flex-direction:column;gap:11px}
+#replyNotice{line-height:1.6;min-height:23px}
+.reply-actions{display:flex;gap:9px;flex-wrap:wrap}
+.reply-actions>*{flex:1;min-width:165px;text-align:center}
+.reply-actions .wa-link{justify-content:center;border:1px solid #c7ead7;font-size:11px}
+#replyFeedback{font-size:11px;line-height:1.5;padding:5px 0;color:#387f9a}
+.reply-history{margin-top:8px;border-top:1px solid #e9f1f3;padding-top:15px}
+.reply-history>strong{font-size:11px;color:#315466}
+.reply-history-list{display:flex;flex-direction:column;gap:5px;margin-top:10px}
+.reply-history-list>p{font-size:11px;color:#8ba0ad;line-height:1.6}
+.reply-history-entry{padding:10px 11px;border-radius:8px;background:#f5fafb;display:flex;flex-direction:column;gap:4px;font-size:11px;color:#356174}
+.reply-history-entry span{color:#688697}.reply-history-entry small{font-size:10px;color:#8fa5af}
+@media(max-width:480px){.reply-actions{flex-direction:column}.reply-actions>*{width:100%;min-width:0}}
