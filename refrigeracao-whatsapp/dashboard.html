@@ -53,6 +53,17 @@
       <button class="stat-card" data-filter="andamento"><span class="stat-top"><span class="stat-title">Em andamento</span><span class="stat-icon teal">⚙</span></span><strong id="metricProgress">—</strong><span class="stat-foot"><span class="stat-mini">Serviços</span> iniciados</span></button>
       <button class="stat-card" data-filter="concluido"><span class="stat-top"><span class="stat-title">Concluídos</span><span class="stat-icon green">✓</span></span><strong id="metricDone">—</strong><span class="stat-foot"><span class="stat-mini">Serviços</span> finalizados</span></button>
     </section>
+    <section class="ops-calendar-section" id="calendarSection" aria-labelledby="calendarTitle" hidden>
+      <header class="ops-calendar-heading">
+       <div><div class="eyebrow dark">PLANEJAMENTO E ATENDIMENTOS</div><h2 id="calendarTitle">Agenda de serviços</h2><p>Uma visão mensal das visitas planejadas e das datas solicitadas pelos clientes. Agendamentos dependem de confirmação.</p></div>
+       <div class="ops-calendar-controls"><button type="button" id="opsCalendarToday">Hoje</button><button type="button" id="opsCalendarPrev" aria-label="Mês anterior">‹</button><strong id="opsCalendarMonth"></strong><button type="button" id="opsCalendarNext" aria-label="Próximo mês">›</button></div>
+      </header>
+      <div class="ops-calendar-legend"><span><i class="ops-dot-planned"></i>Visita planejada</span><span><i class="ops-dot-requested"></i>Data solicitada</span><span>Datas e horários sujeitos à sua confirmação</span></div>
+      <div class="ops-calendar-layout">
+       <div class="ops-calendar-board"><div id="opsCalendarGrid" class="ops-calendar-grid" aria-label="Calendário de visitas e pedidos"></div></div>
+       <aside class="ops-calendar-day" aria-labelledby="opsSelectedDate"><div class="eyebrow dark">RESUMO DO DIA</div><h3 id="opsSelectedDate">Selecione uma data</h3><p id="opsDayCount" class="subtle">Consulte os atendimentos.</p><div id="opsDayOrders" aria-live="polite"></div><p class="ops-calendar-explain">A data selecionada no site é uma preferência do cliente. Só marque a visita como agendada após combinar diretamente com ele.</p></aside>
+      </div>
+     </section>
     <section class="workbench" id="ordersSection">
      <div class="panel-heading"><div><div class="eyebrow dark">ACOMPANHAMENTO</div><h2 id="ordersTitle">Ordens de serviço</h2><p class="subtle">Selecione um pedido para atualizar sua situação, orçamento ou agendamento.</p></div><div class="panel-tools"><label class="searchbox" for="searchInput"><span>⌕</span><input id="searchInput" type="search" placeholder="Buscar pedido, cliente, bairro..." autocomplete="off"></label><select id="statusFilter" aria-label="Filtrar por status"><option value="todos">Todos os status</option><option value="novo">Novos pedidos</option><option value="orcamento">Orçamento pendente</option><option value="agendado">Agendados</option><option value="andamento">Em andamento</option><option value="concluido">Concluídos</option><option value="cancelado">Cancelados</option></select></div></div>
      <div class="work-grid"><div class="orders-pane"><div class="list-meta"><span id="listCount">Carregando ordens...</span><span>WhatsApp + site · mais recentes</span></div><div id="ordersList" class="orders-list" aria-live="polite"></div><div class="source-note">Esta lista reúne pedidos do WhatsApp e do Atendimento Expresso do site. Submissões dos formulários tradicionais do Wix são acompanhadas no painel de formulários.</div></div>
