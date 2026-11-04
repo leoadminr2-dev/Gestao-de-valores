@@ -62,6 +62,31 @@
         <div class="details-grid"><div><span>Serviço</span><strong id="detailService"></strong></div><div><span>Equipamento</span><strong id="detailEquipment"></strong></div><div><span>Bairro</span><strong id="detailDistrict"></strong></div><div><span>Preferência do cliente</span><strong id="detailPreference"></strong></div><div><span>Recebido em</span><strong id="detailCreated"></strong></div><div><span>Sincronização Wix</span><strong id="detailSync"></strong></div></div>
         <a class="wa-link" id="detailWhatsApp" href="#" target="_blank" rel="noopener noreferrer">☏ Conversar pelo WhatsApp <span>↗</span></a>
         <form id="orderForm"><div class="form-heading">Atualizar acompanhamento</div><label for="editStatus">Etapa do serviço</label><select id="editStatus" required><option value="novo">Novo pedido</option><option value="orcamento">Orçamento pendente</option><option value="agendado">Agendado</option><option value="andamento">Em andamento</option><option value="concluido">Concluído</option><option value="cancelado">Cancelado</option></select><div class="form-pair"><div><label for="editDate">Data da visita</label><input id="editDate" type="datetime-local"></div><div><label for="editAmount">Orçamento (R$)</label><input id="editAmount" type="number" min="0" max="999999.99" step="0.01" placeholder="0,00"></div></div><label for="editNotes">Observações internas</label><textarea id="editNotes" rows="3" maxlength="1500" placeholder="Detalhes para acompanhar esta ordem..."></textarea><div class="form-feedback" id="saveStatus" role="status"></div><button class="primary full" type="submit" id="saveOrder">Salvar alterações <span>✓</span></button><p class="edit-note">As atualizações de acompanhamento ficam salvas nesta central. A cópia original da solicitação no CMS Wix permanece preservada.</p></form>
+        <section class="customer-response" id="customerResponse" aria-labelledby="customerTitle">
+         <div class="customer-head"><div class="eyebrow dark">RETORNO AO CLIENTE</div><h3 id="customerTitle">Responder pelo WhatsApp</h3><p>Defina a proposta, confira e escolha como enviar. Nada é enviado automaticamente quando você salva a ordem.</p></div>
+         <label for="replyKind">Tipo de resposta</label>
+         <select id="replyKind">
+          <option value="retorno">Retorno sobre a solicitação</option>
+          <option value="orcamento">Enviar valor do orçamento</option>
+          <option value="agendamento">Sugerir data e horário</option>
+          <option value="andamento">Atualizar andamento</option>
+         </select>
+         <label for="customerExtra">Mensagem adicional ao cliente (opcional)</label>
+         <textarea id="customerExtra" rows="2" maxlength="240" placeholder="Informação que você deseja compartilhar com o cliente."></textarea>
+         <p class="edit-note">As observações internas não aparecem na mensagem. Para enviar novos valores ou datas, salve a ordem primeiro.</p>
+         <button type="button" class="secondary-action" id="previewReply">Pré-visualizar mensagem</button>
+         <div id="replyPreviewWrap" hidden>
+           <label for="replyPreview">Mensagem que o cliente receberá</label>
+           <textarea id="replyPreview" rows="9" readonly aria-label="Mensagem ao cliente"></textarea>
+           <div id="replyNotice" class="edit-note" role="status"></div>
+           <div class="reply-actions">
+             <button type="button" class="primary" id="sendReplyApi" hidden>Autorizar e enviar agora</button>
+             <a class="wa-link" id="sendReplyManual" href="#" target="_blank" rel="noopener noreferrer">Abrir WhatsApp Business ↗</a>
+           </div>
+           <div id="replyFeedback" role="status" class="form-feedback"></div>
+         </div>
+         <div class="reply-history"><strong>Histórico de retornos pela API</strong><div id="replyHistory" class="reply-history-list">Selecione uma ordem para consultar.</div></div>
+        </section>
        </div>
      </div></div>
     </section>
