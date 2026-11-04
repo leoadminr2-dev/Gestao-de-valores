@@ -2,6 +2,7 @@ import http from "node:http";
 import crypto from "node:crypto";
 import pg from "pg";
 import {advance} from "./bot.mjs";
+import {appReplyPhones} from "./coexistence.mjs";
 
 const DB_URL=process.env.DATABASE_URL||"";
 const APP_SECRET=process.env.WHATSAPP_APP_SECRET||"";
@@ -71,6 +72,20 @@ async function handleInbound(message){
  }finally{db.release();}
  if(!duplicate)await tick();
 }
+async function handleManualReply(phone){
+ // A human reply from the Business App pauses bot responses for this customer.
+ // Never interpret the echo as a new inbound order or send an automatic reply.
+ const db=await pool.connect();
+ try{
+  await db.query("BEGIN");
+  await db.query("INSERT INTO wa_sessions (phone,mode) VALUES($1,'human') ON CONFLICT (phone) DO UPDATE SET mode='human',updated_at=now()",[phone]);
+  await db.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE phone=$1 AND sent_at IS NULL AND cancelled_at IS NULL",[phone]);
+  await db.query("COMMIT");
+ }catch(error){
+  try{await db.query("ROLLBACK")}catch{}
+  throw error;
+ }finally{db.release()}
+}
 async function wixInsert(order){
  if(!WIX_CLIENT_ID)throw new Error("WIX_CLIENT_ID_NOT_CONFIGURED");
  const tokenResponse=await fetch("https://www.wixapis.com/oauth2/token",{
@@ -135,10 +150,14 @@ async function sendMessage(phone,message){
 async function sendOutbox(){
  if(!metaReady)return;
  for(let i=0;i<10;i++){
-  const picked=await pool.query("UPDATE wa_outbound SET lease_until=now()+interval '90 seconds',attempts=attempts+1 WHERE id=(SELECT id FROM wa_outbound WHERE sent_at IS NULL AND attempts<15 AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING id,phone,message");
+  const picked=await pool.query("UPDATE wa_outbound SET lease_until=now()+interval '90 seconds',attempts=attempts+1 WHERE id=(SELECT id FROM wa_outbound WHERE sent_at IS NULL AND cancelled_at IS NULL AND attempts<15 AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING id,phone,message");
   if(picked.rowCount===0)break;
   const row=picked.rows[0];
-  const last=await pool.query("SELECT last_message_at FROM wa_sessions WHERE phone=$1",[row.phone]);
+  const last=await pool.query("SELECT last_message_at,mode FROM wa_sessions WHERE phone=$1",[row.phone]);
+  if(last.rows[0]?.mode==="human"){
+   await pool.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE id=$1",[row.id]);
+   continue;
+  }
   if(!last.rows[0]||Date.now()-new Date(last.rows[0].last_message_at).getTime()>23*60*60*1000){
    await pool.query("UPDATE wa_outbound SET last_error='OUTSIDE_24H_WINDOW',lease_until=now()+interval '1 day' WHERE id=$1",[row.id]);
    continue;
@@ -182,7 +201,10 @@ const server=http.createServer(async(req,res)=>{
   for(const entry of body.entry||[]){
    for(const change of entry.changes||[]){
     const value=change.value||{};
+    const phones=appReplyPhones(change,PHONE_NUMBER_ID);
+    for(const phone of phones){await handleManualReply(phone);processed++;}
     if(String(value.metadata?.phone_number_id||"")!==PHONE_NUMBER_ID)continue;
+    if(change.field!=="messages")continue;
     for(const message of value.messages||[]){
      if(!["text","image","interactive","button"].includes(message.type))continue;
      await handleInbound(message);
