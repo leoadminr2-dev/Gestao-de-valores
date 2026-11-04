@@ -197,4 +197,9 @@ const server=http.createServer(async(req,res)=>{
  }
 });
 server.listen(PORT,"0.0.0.0",()=>console.log("Refrigeracao WhatsApp webhook initialized on port "+PORT+"; "+(metaReady?"META_CONFIGURED":"AWAITING_META")));
-setInterval(()=>{void tick();},30000).unref();
+// Conservar cotas gratuitas: sem sondagens ao banco antes do vínculo oficial Meta.
+// Durante operação, a fila é acionada a cada mensagem recebida e sondada a cada 10 min.
+if(metaReady){
+  setTimeout(()=>{void tick();},5000).unref();
+  setInterval(()=>{void tick();},10*60*1000).unref();
+}
