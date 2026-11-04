@@ -2,9 +2,9 @@
 // O bot nunca confirma preço final, visita, contrato ou compra sem avaliação do responsável.
 export const PLATFORM_URL = "https://headless-qqhigtkprnz-leoadminr2-140a.wix-site-host.com/";
 export const MENU = [
-  "❄️ *LEONARDO MOREIRA*",
-  "🔧 *REFRIGERAÇÃO*",
-  "━━━━━━━━━━━━━━━━━━",
+  "❄️ *LEONARDO MOREIRA* ❄️",
+  "*REFRIGERAÇÃO*",
+  "🔧 Instalação • Manutenção • Higienização",
   "",
   "Olá! 👋 Seja bem-vindo(a)!",
   "",
