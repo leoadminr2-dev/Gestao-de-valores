@@ -154,7 +154,7 @@ export function createDashboard(pool,replyOptions={}){
    ]);
    answer(res,200,{metrics:metrics.rows,orders:data.rows,limited:data.rowCount===500});return true;
   }
-  const match=url.pathname.match(/^\/painel\/api\/ordens\/((?:WA|LMR)-[A-Z0-9-]{8,40})$/);
+  const match=url.pathname.match(/^\/painel\/api\/ordens\/((?:WA|LMR|FORM)-[A-Z0-9-]{8,64})$/);
   if(match&&req.method==="PATCH"){
    if(!equal(req.headers["x-csrf-token"],auth.csrf)){answer(res,403,{error:"requisicao_nao_autorizada"});return true;}
    let input;try{input=await bodyJSON(req)}catch{answer(res,400,{error:"dados_invalidos"});return true;}
