@@ -16,6 +16,20 @@ test('GET challenge valido',async()=>{const r=await createHandler(env)(new Reque
 test('GET challenge invalido',async()=>assert.equal((await createHandler(env)(new Request(url+'?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=OK'))).status,403));
 test('POST assinatura invalida',async()=>assert.equal((await createHandler(env)(new Request(url,{method:'POST',body:'{}',headers:{'x-hub-signature-256':'sha256='+('0').repeat(64)}}))).status,401));
 test('POST valido responde',async()=>{let p=0,s=0;const h=createHandler(env,{store:{process:async()=>{p++;return {data:{}};}},send:async()=>{s++;}});const r=await h(request());assert.equal(r.status,200);assert.equal((await r.json()).accepted,1);assert.equal(p,1);assert.equal(s,1);});
+test('envio confirmado muda status para enviado',async()=>{
+  let marked=0;let sent=0;
+  const h=createHandler(env,{store:{process:async()=>({data:{}}),markSent:async(id)=>{assert.equal(id,'wamid.1');marked++;}},send:async()=>{sent++;}});
+  const response=await h(request());assert.equal(response.status,200);assert.equal(sent,1);assert.equal(marked,1);
+});
+test('falha na Meta preserva mensagem pendente para nova tentativa',async()=>{
+  let marked=0;
+  const h=createHandler(env,{store:{process:async()=>({data:{}}),markSent:async()=>{marked++;}},send:async()=>{throw Error('Meta temporarily unavailable');}});
+  const response=await h(request());assert.equal(response.status,500);assert.equal(marked,0);
+});
+test('falha ao confirmar entrega retorna 500 para permitir retry',async()=>{
+  const h=createHandler(env,{store:{process:async()=>({data:{}}),markSent:async()=>{throw Error('db temporarily unavailable');}},send:async()=>({sent:true})});
+  const response=await h(request());assert.equal(response.status,500);
+});
 test('telefone nao autorizado',async()=>{let p=0;const r=await createHandler(env,{store:{process:async()=>{p++;return {};}}})(request(data('1234','5521990000000')));assert.equal((await r.json()).ignored,1);assert.equal(p,0);});
 test('id Meta diferente',async()=>{const r=await createHandler(env)(request(data('4321')));assert.equal((await r.json()).ignored,1);});
 test('outbound bloqueado',async()=>{const off={...env,OUTBOUND_ENABLED:'false'};const r=await createHandler(off,{store:{process:async()=>{throw Error('must not call');}},send:async()=>{throw Error('must not send');}})(request(data(),off));assert.equal((await r.json()).accepted,0);});
