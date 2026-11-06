@@ -42,6 +42,18 @@ export function reply(cmd,data={}){
   if(cmd.action==='summary')return '📊 *Resumo*\nTarefas abertas: '+(data.tasks||0)+'\nRegistros: '+(data.total||0)+'\nDespesas: R$ '+Number(data.expenses||0).toFixed(2).replace('.',',')+'\nRecebimentos: R$ '+Number(data.income||0).toFixed(2).replace('.',',');
   return 'Não entendi. Escreva *ajuda* para ver os comandos.';
 }
+async function commandData(c,sid,cmd){
+  let data={};
+  if(cmd.action==='tasks'){
+    const x=await c.query("SELECT content FROM romeu_entries WHERE space_id=$1 AND kind='task' AND status='open' ORDER BY created_at DESC LIMIT 8",[sid]);
+    data={items:x.rows};
+  }
+  if(cmd.action==='summary'){
+    const x=await c.query("SELECT count(*)::int total,count(*) FILTER(WHERE kind='task' AND status='open')::int tasks,coalesce(sum(amount) FILTER(WHERE kind='expense'),0)::float8 expenses,coalesce(sum(amount) FILTER(WHERE kind='income'),0)::float8 income FROM romeu_entries WHERE space_id=$1",[sid]);
+    data=x.rows[0];
+  }
+  return data;
+}
 export async function makeStore(url){
   const {default:pg}=await import('pg');
   const pool=new pg.Pool({connectionString:url,max:3,connectionTimeoutMillis:5000,idleTimeoutMillis:15000,ssl:{rejectUnauthorized:true}});
@@ -50,7 +62,20 @@ export async function makeStore(url){
     try{
       await c.query('BEGIN');
       const added=await c.query("INSERT INTO romeu_wa_inbox(message_id,from_number,status) VALUES($1,$2,'received') ON CONFLICT(message_id) DO NOTHING RETURNING message_id",[messageId,from]);
-      if(!added.rowCount){await c.query('ROLLBACK');return {skip:'duplicate'};}
+      if(!added.rowCount){
+        // A reply might have failed after the business action was committed.
+        // Retry that reply without creating the entry or reserving quota again.
+        const existing=await c.query("SELECT from_number,status FROM romeu_wa_inbox WHERE message_id=$1 FOR UPDATE",[messageId]);
+        if(existing.rows[0]?.status!=='reserved'||existing.rows[0]?.from_number!==from){
+          await c.query('ROLLBACK');return {skip:'duplicate'};
+        }
+        const user=await c.query("SELECT id FROM romeu_users WHERE whatsapp_phone=$1",[from]);
+        if(!user.rowCount)throw Error('Missing user for reply retry');
+        const space=await c.query("SELECT id FROM romeu_spaces WHERE owner_id=$1 AND kind='personal' ORDER BY created_at ASC LIMIT 1",[user.rows[0].id]);
+        if(!space.rowCount)throw Error('Missing space for reply retry');
+        const data=await commandData(c,space.rows[0].id,cmd);
+        await c.query('COMMIT');return {data,retry:true};
+      }
       const month=new Date().toISOString().slice(0,7)+'-01';
       const q=await c.query("INSERT INTO romeu_wa_quota(month,sender_id,reserved) VALUES($1,$2,1) ON CONFLICT(month,sender_id) DO UPDATE SET reserved=romeu_wa_quota.reserved+1 WHERE romeu_wa_quota.reserved<$3 RETURNING reserved",[month,'romeu-primary',limit]);
       if(!q.rowCount){await c.query("UPDATE romeu_wa_inbox SET status='quota_blocked' WHERE message_id=$1",[messageId]);await c.query('COMMIT');return {skip:'quota'};}
@@ -61,12 +86,13 @@ export async function makeStore(url){
       if(!sid){sp=await c.query("INSERT INTO romeu_spaces(name,kind,owner_id) VALUES('Pessoal','personal',$1) RETURNING id",[uid]);sid=sp.rows[0].id;}
       await c.query("INSERT INTO romeu_memberships(space_id,user_id,role) VALUES($1,$2,'owner') ON CONFLICT DO NOTHING",[sid,uid]);
       if(cmd.action==='create')await c.query("INSERT INTO romeu_entries(space_id,author_id,kind,content,amount,metadata) VALUES($1,$2,$3,$4,$5,$6::jsonb)",[sid,uid,cmd.kind,cmd.content,cmd.amount??null,JSON.stringify({origin:'whatsapp',wa_message_id:messageId})]);
-      let data={};
-      if(cmd.action==='tasks'){const x=await c.query("SELECT content FROM romeu_entries WHERE space_id=$1 AND kind='task' AND status='open' ORDER BY created_at DESC LIMIT 8",[sid]);data={items:x.rows};}
-      if(cmd.action==='summary'){const x=await c.query("SELECT count(*)::int total,count(*) FILTER(WHERE kind='task' AND status='open')::int tasks,coalesce(sum(amount) FILTER(WHERE kind='expense'),0)::float8 expenses,coalesce(sum(amount) FILTER(WHERE kind='income'),0)::float8 income FROM romeu_entries WHERE space_id=$1",[sid]);data=x.rows[0];}
+      const data=await commandData(c,sid,cmd);
       await c.query("UPDATE romeu_wa_inbox SET status='reserved' WHERE message_id=$1",[messageId]);
       await c.query('COMMIT');return {data};
     }catch(e){await c.query('ROLLBACK').catch(()=>{});throw e;}finally{c.release();}
+  },async markSent(messageId){
+    const result=await pool.query("UPDATE romeu_wa_inbox SET status='sent' WHERE message_id=$1 AND status='reserved' RETURNING message_id",[messageId]);
+    if(!result.rowCount)throw Error('Could not confirm WhatsApp delivery request');
   },async ping(){await pool.query('SELECT 1');}};
 }
 export async function sendToMeta(env,to,body,messageId,fetcher=fetch){
@@ -109,7 +135,9 @@ export function createHandler(env,{store,send=sendToMeta}={}){
         try{
           const r=await store.process({from,messageId:m.id,cmd,limit:Math.min(800,Math.max(1,Number(env.MAX_MONTHLY_REPLIES)||800))});
           if(r.skip){ignored++;continue;}
-          await send(env,from,reply(cmd,r.data),m.id);accepted++;
+          await send(env,from,reply(cmd,r.data),m.id);
+          await store.markSent?.(m.id);
+          accepted++;
         }catch(e){errors++;console.error('Webhook processing failed:',String(e?.message||e).replace(/Bearer\s+\S+/gi,'Bearer ***'));}
       }
     }
