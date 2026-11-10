@@ -31,3 +31,10 @@ test('data invalida, valor fora de limite e evento sem nome sao rejeitados',()=>
  assert.throws(()=>parseReceipt({...base,amountCents:0}),/Valor inválido/);
  assert.throws(()=>parseReceipt({...base,allocations:[{category:'Evento',cents:17000}]}),/nome do evento/);
 });
+
+test('datas de comprovante precisam existir no calendário de 2026',()=>{
+ for(const paidOn of ['2026-02-29','2026-02-30','2026-04-31','2026-06-31']) {
+  assert.throws(()=>parseReceipt({...base,paidOn}),e=>e.status===400 && /data real/.test(e.message));
+ }
+ for(const paidOn of ['2026-02-28','2026-04-30','2026-05-31']) assert.equal(parseReceipt({...base,paidOn}).paid,paidOn);
+});

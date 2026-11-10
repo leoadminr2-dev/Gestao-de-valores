@@ -26,7 +26,8 @@ function parseReceipt(payload){
  const paid=String(payload.paidOn||'');
  if(name.length<5||name.length>120||name.split(' ').length<2)throw Object.assign(new Error('Informe nome e sobrenome completos do pagador.'),{status:400});
  if(!Number.isSafeInteger(cents)||cents<1||cents>20000000)throw Object.assign(new Error('Valor inválido.'),{status:400});
- if(!DATE_RE.test(paid)||Number.isNaN(Date.parse(paid+'T12:00:00Z'))||paid>new Date().toISOString().slice(0,10))throw Object.assign(new Error('Informe a data real do pagamento em 2026.'),{status:400});
+ const paidDate=new Date(paid+'T12:00:00Z');
+ if(!DATE_RE.test(paid)||Number.isNaN(paidDate.getTime())||paidDate.toISOString().slice(0,10)!==paid||paid>new Date().toISOString().slice(0,10))throw Object.assign(new Error('Informe a data real do pagamento em 2026.'),{status:400});
  const items=payload.allocations;
  if(!Array.isArray(items)||!items.length||items.length>8)throw Object.assign(new Error('Informe de 1 a 8 finalidades para o pagamento.'),{status:400});
  let sum=0;
