@@ -21,6 +21,7 @@ function fileSignature(bytes,type){
   return false;
 }
 function parseReceipt(payload){
+ if(!payload||typeof payload!=='object'||Array.isArray(payload))throw Object.assign(new Error('Comprovante inválido.'),{status:400});
  const name=String(payload.payerName||'').trim().replace(/\s+/g,' ');
  const cents=Number(payload.amountCents);
  const paid=String(payload.paidOn||'');
@@ -32,6 +33,7 @@ function parseReceipt(payload){
  if(!Array.isArray(items)||!items.length||items.length>8)throw Object.assign(new Error('Informe de 1 a 8 finalidades para o pagamento.'),{status:400});
  let sum=0;
  const alloc=items.map(x=>{
+   if(!x||typeof x!=='object'||Array.isArray(x))throw Object.assign(new Error('Finalidade de pagamento inválida.'),{status:400});
    const category=String(x.category||'');
    const amount=Number(x.cents);
    const competence=String(x.competence||'');

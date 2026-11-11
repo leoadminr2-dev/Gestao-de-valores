@@ -38,3 +38,8 @@ test('datas de comprovante precisam existir no calendário de 2026',()=>{
  }
  for(const paidOn of ['2026-02-28','2026-04-30','2026-05-31']) assert.equal(parseReceipt({...base,paidOn}).paid,paidOn);
 });
+
+test('corpo e finalidades malformados recebem validação 400',()=>{
+ for(const payload of [null,undefined,[],42,'texto']) assert.throws(()=>parseReceipt(payload),e=>e.status===400);
+ for(const item of [null,[],42,'texto']) assert.throws(()=>parseReceipt({...base,allocations:[item]}),e=>e.status===400);
+});
