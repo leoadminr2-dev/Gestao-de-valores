@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="theme-color" content="#152431">
+<title>Gestão do Sorteio | Leonardo Moreira Refrigeração</title>
+<link rel="stylesheet" href="/painel/draw-dashboard.css">
+<script src="/painel/draw-dashboard.js" defer></script>
+</head>
+<body>
+<div class="layout">
+ <aside class="sidebar">
+  <div class="brand"><span class="snow">❄</span><div><strong>LEONARDO MOREIRA</strong><small>REFRIGERAÇÃO</small></div></div>
+  <div class="divider">ADMINISTRAÇÃO</div>
+  <a class="side-link" href="/painel">▦ Central de Operações</a>
+  <span class="side-link current">▥ Gestão de números</span>
+  <a class="side-link" href="https://headless-fzouiqsvegf-leoadminr2-140a.wix-site-host.com/">◉ Página pública</a>
+  <div class="side-footer">Área protegida<br>Cadastros não são públicos</div>
+ </aside>
+ <main class="main">
+  <div class="top"><div><span class="eyebrow">CAMPANHA · INSTALAÇÃO SPLIT INVERTER</span><h1>Gestão de inscrições</h1><p>Cadastros, quantidades e números atribuídos — somente para a organização.</p></div><button id="refresh" class="btn subtle" type="button" hidden>Atualizar</button></div>
+  <section id="login" class="card login">
+   <div><h2>Acesso administrativo</h2><p>Utilize a mesma senha da Central de Operações. O conteúdo dos participantes só será carregado após autenticação.</p></div>
+   <form id="loginForm"><label for="password">Senha</label><input type="password" id="password" autocomplete="current-password" required><button class="btn primary" type="submit">Entrar</button><div class="error" role="alert" id="loginError"></div></form>
+  </section>
+  <section id="dashboard" hidden>
+   <div id="state" role="status" class="notice">Consultando dados…</div>
+   <div class="metrics">
+    <article class="card"><small>Total de números</small><strong id="total">—</strong></article>
+    <article class="card"><small>Cadastros</small><strong id="entries">—</strong></article>
+    <article class="card"><small>Números atribuídos</small><strong id="occupied">—</strong></article>
+    <article class="card"><small>Disponíveis</small><strong id="available">—</strong></article>
+   </div>
+   <section class="card roster">
+    <div class="roster-head"><div><h2>Participantes e números</h2><p>Pesquise por nome, telefone ou número específico. Os dados vêm do Neon.</p></div><label class="search"><span>Pesquisar</span><input id="search" type="search" placeholder="Nome, celular ou número…" autocomplete="off"></label></div>
+    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>WhatsApp</th><th>Quantidade</th><th>Números atribuídos</th><th>Data</th></tr></thead><tbody id="tableBody"></tbody></table></div>
+    <p id="count" class="count">Nenhum cadastro confirmado.</p>
+   </section>
+  </section>
+  <footer>Leonardo Moreira Refrigeração · Painel interno · Não disponibilizar dados pessoais publicamente</footer>
+ </main>
+</div>
+</body></html>
