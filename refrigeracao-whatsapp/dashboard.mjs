@@ -86,7 +86,16 @@ export function createDashboard(pool,replyOptions={}){
    const content=await readFile(new URL("./dashboard.html",import.meta.url));
    res.writeHead(200,{"content-type":"text/html; charset=utf-8"});res.end(content);return true;
   }
-  const assetPaths={"/painel/dashboard.css":["dashboard.css","text/css; charset=utf-8"],"/painel/dashboard.js":["dashboard.js","text/javascript; charset=utf-8"]};
+  if(req.method==="GET"&&[ "/painel/sorteio", "/painel/sorteio/" ].includes(url.pathname)){
+   const page=await readFile(new URL("./draw-dashboard.html",import.meta.url));
+   res.writeHead(200,{"content-type":"text/html; charset=utf-8"});res.end(page);return true;
+  }
+  const assetPaths={
+   "/painel/dashboard.css":["dashboard.css","text/css; charset=utf-8"],
+   "/painel/dashboard.js":["dashboard.js","text/javascript; charset=utf-8"],
+   "/painel/draw-dashboard.css":["draw-dashboard.css","text/css; charset=utf-8"],
+   "/painel/draw-dashboard.js":["draw-dashboard.js","text/javascript; charset=utf-8"]
+  };
   if(req.method==="GET"&&assetPaths[url.pathname]){
    const [file,ct]=assetPaths[url.pathname];const data=await readFile(new URL("./"+file,import.meta.url));
    res.writeHead(200,{"content-type":ct});res.end(data);return true;
@@ -145,6 +154,37 @@ export function createDashboard(pool,replyOptions={}){
      answer(res,200,outcome);
     }
    }catch(e){answer(res,e.status||500,{error:String(e.message||"erro_envio")});}
+   return true;
+  }
+  if(url.pathname==="/painel/api/draw/overview"&&req.method==="GET"){
+   try{
+    const campaignId="split-inverter-9000-2026";
+    const [campaignData,counts,participants]=await Promise.all([
+     pool.query("SELECT total_numbers,registration_open FROM public.refrigeracao_draw_campaigns WHERE id=$1",[campaignId]),
+     pool.query("SELECT count(*)::int AS allocated FROM public.refrigeracao_draw_allocations WHERE campaign_id=$1",[campaignId]),
+     pool.query("SELECT participant_name,phone_e164,requested_quantity,assigned_numbers,created_at FROM public.refrigeracao_draw_entries WHERE campaign_id=$1 ORDER BY created_at DESC LIMIT 500",[campaignId])
+    ]);
+    const campaign=campaignData.rows[0];
+    if(!campaign){answer(res,404,{error:"campanha_nao_encontrada"});return true;}
+    const allocated=counts.rows[0]?.allocated||0;
+    answer(res,200,{
+     total:campaign.total_numbers,
+     entries:participants.rowCount,
+     allocated,
+     available:Math.max(0,campaign.total_numbers-allocated),
+     open:campaign.registration_open,
+     participants:participants.rows.map(row=>({
+      name:row.participant_name,
+      phone:row.phone_e164,
+      quantity:row.requested_quantity,
+      numbers:row.assigned_numbers,
+      date:row.created_at
+     }))
+    });
+   }catch(error){
+    console.error("DRAW_DASHBOARD_FAILED",String(error.code||error.message).slice(0,90));
+    answer(res,503,{error:"consulta_temporariamente_indisponivel"});
+   }
    return true;
   }
   if(url.pathname==="/painel/api/overview"&&req.method==="GET"){
