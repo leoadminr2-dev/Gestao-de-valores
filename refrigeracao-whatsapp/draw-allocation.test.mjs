@@ -60,7 +60,7 @@ class FakePool {
     return {query,release(){if(active){active=false;unlock();}}};
   }
 }
-function request(i,n=1) {
+function request(i,n=5) {
   const d=String(10000000+i).padStart(8,'0');
   return {name:"Pessoa Numero "+i,phone:"+55219"+d,quantity:n,requestId:ID()};
 }
@@ -76,13 +76,13 @@ test("closed campaign cannot create registration",async()=>{
  assert.equal(p.state.entries.length,0);
  assert.equal(p.state.allocations.length,0);
 });
-test("one number per registration committed exactly once",async()=>{
+test("full requested quantity committed exactly once",async()=>{
  const p=new FakePool();
- const item=request(2);
+ const item=request(2,15);
  const first=await assignNumbers(p,item);
- assert.equal(first.quantity,1);
- assert.equal(first.numbers.length,1);
- assert.equal(p.state.allocations.length,1);
+ assert.equal(first.quantity,15);
+ assert.equal(first.numbers.length,15);
+ assert.equal(p.state.allocations.length,15);
  const retry=await assignNumbers(p,item);
  assert.equal(retry.repeated,true);
  assert.deepEqual(retry.numbers,first.numbers);
@@ -90,35 +90,35 @@ test("one number per registration committed exactly once",async()=>{
 });
 test("duplicate phone with new request cannot collect more numbers",async()=>{
  const p=new FakePool();
- const first=request(3);
+ const first=request(3,10);
  await assignNumbers(p,first);
  await assert.rejects(assignNumbers(p,{...first,requestId:ID()}),e=>e.code==="ALREADY_REGISTERED");
- assert.equal(p.state.allocations.length,1);
+ assert.equal(p.state.allocations.length,10);
 });
 test("simultaneous visitors get disjoint numbers",async()=>{
  const p=new FakePool();
- const results=await Promise.all(Array.from({length:10},(_,i)=>assignNumbers(p,request(i+10))));
- assert.equal(results.reduce((s,r)=>s+r.quantity,0),10);
- assert.equal(p.state.allocations.length,10);
- assert.equal(new Set(p.state.allocations.map(a=>a.number)).size,10);
+ const results=await Promise.all(Array.from({length:10},(_,i)=>assignNumbers(p,request(i+10,15))));
+ assert.equal(results.reduce((s,r)=>s+r.quantity,0),150);
+ assert.equal(p.state.allocations.length,150);
+ assert.equal(new Set(p.state.allocations.map(a=>a.number)).size,150);
 });
 test("insufficient remaining pool rolls back without partial registration",async()=>{
- const p=new FakePool(1);
- await assignNumbers(p,request(40));
- await assert.rejects(assignNumbers(p,request(41)),e=>e.code==="INSUFFICIENT_NUMBERS");
+ const p=new FakePool(500);
+ await assignNumbers(p,request(40,490));
+ await assert.rejects(assignNumbers(p,request(41,20)),e=>e.code==="INSUFFICIENT_NUMBERS");
  assert.equal(p.state.entries.length,1);
- assert.equal(p.state.allocations.length,1);
+ assert.equal(p.state.allocations.length,490);
 });
 test("database failure after creating registration rolls back entire transaction",async()=>{
  const p=new FakePool();
  p.failInsertAllocations=true;
- await assert.rejects(assignNumbers(p,request(50)),/injected database failure/);
+ await assert.rejects(assignNumbers(p,request(50,5)),/injected database failure/);
  assert.equal(p.state.entries.length,0);
  assert.equal(p.state.allocations.length,0);
 });
-test("rejects all quantities other than one",async()=>{
+test("rejects zero, fractional and oversized quantities",async()=>{
  const p=new FakePool();
- for(const q of [0,-1,2,2.5,5,20,501,"nan"]) {
+ for(const q of [0,-1,2.5,501,"nan"]) {
   await assert.rejects(assignNumbers(p,{...request(70),quantity:q}),e=>e.code==="INVALID_QUANTITY");
  }
  assert.equal(p.state.allocations.length,0);
