@@ -4,6 +4,44 @@ const EXPECTED_ORIGIN = "https://headless-fzouiqsvegf-leoadminr2-140a.wix-site-h
 
 export function createDrawRoute({pool, readBody, json, enabled, turnstileSecret}) {
   return async (req, res, url) => {
+    if (url.pathname === "/api/draw/progress") {
+      if (req.method !== "GET") {
+        json(res, 405, {error: "method_not_allowed"});
+        return true;
+      }
+      const progressOrigin = String(req.headers.origin || "");
+      if (progressOrigin && progressOrigin !== EXPECTED_ORIGIN) {
+        json(res, 403, {error: "invalid_origin"});
+        return true;
+      }
+      res.setHeader("Access-Control-Allow-Origin", EXPECTED_ORIGIN);
+      res.setHeader("Vary", "Origin");
+      // No totals, names, phones or absolute counts on the public endpoint.
+      if (!enabled) {
+        json(res, 200, {open: false, remainingPercent: null});
+        return true;
+      }
+      try {
+        const sql = "SELECT c.total_numbers,c.registration_open,count(a.number)::int AS distributed "+
+          "FROM public.refrigeracao_draw_campaigns c "+
+          "LEFT JOIN public.refrigeracao_draw_allocations a ON a.campaign_id=c.id "+
+          "WHERE c.id=$1 GROUP BY c.id,c.total_numbers,c.registration_open";
+        const progress = await pool.query(sql, ["split-inverter-9000-2026"]);
+        const campaign = progress.rows[0];
+        if (!campaign || !campaign.registration_open) {
+          json(res, 200, {open: false, remainingPercent: null});
+          return true;
+        }
+        const total = Number(campaign.total_numbers);
+        const distributed = Number(campaign.distributed);
+        const remainingPercent = Math.round(1000 * Math.max(0, total-distributed) / total) / 10;
+        json(res, 200, {open: true, remainingPercent});
+      } catch (error) {
+        console.error("DRAW_PROGRESS_FAILED", String(error.code || error.message).slice(0, 90));
+        json(res, 503, {error: "progress_unavailable"});
+      }
+      return true;
+    }
     if (url.pathname !== "/api/draw/allocate") return false;
     const origin = String(req.headers.origin || "");
     if (origin !== EXPECTED_ORIGIN) {
