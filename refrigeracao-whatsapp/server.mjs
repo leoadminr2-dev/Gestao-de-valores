@@ -6,6 +6,7 @@ import {shouldHandleMessage,isProtectedPhone} from "./selective.mjs";
 import {appReplyPhones} from "./coexistence.mjs";
 import {verifyYCloudSignature,relevantYCloudEvent} from "./ycloud.mjs";
 import {createDashboard} from "./dashboard.mjs";
+import {createDrawRoute} from "./draw-route.mjs";
 
 const DB_URL=process.env.DATABASE_URL||"";
 const APP_SECRET=process.env.WHATSAPP_APP_SECRET||"";
@@ -269,10 +270,18 @@ async function tick(){
  finally{processing=false;}
 }
 const dashboard=createDashboard(pool);
+const drawRoute=createDrawRoute({
+  pool,
+  readBody,
+  json,
+  enabled:process.env.DRAW_REGISTRATION_API_ENABLED==="true",
+  turnstileSecret:process.env.DRAW_TURNSTILE_SECRET||""
+});
 const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url||"/","http://localhost");
   if(await dashboard(req,res,url))return;
+  if(await drawRoute(req,res,url))return;
   if(req.method==="GET"&&url.pathname==="/healthz"){
    return json(res,200,{service:"leonardo-refrigeracao-whatsapp",status:metaReady?"configured":"awaiting_meta_onboarding",database:DB_URL?"configured":"missing",wix:WIX_CLIENT_ID?"configured":"missing",graphApi:API_VERSION,yCloud:ycloudReady?(YCLOUD_TEST_MODE?"test_mode":"enabled"):YCLOUD_WEBHOOK_SECRET?"paused":"awaiting_webhook_secret"});
   }
