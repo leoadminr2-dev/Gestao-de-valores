@@ -22,6 +22,18 @@ Implementação para a campanha de instalação profissional de Split Inverter 9
 - **Painel próprio:** frontend `/painel/sorteio` e API `/painel/api/draw/overview` incluídos NESTE PR; exigem autenticação administrativa existente no Render e ainda não estão implantados em produção.
 - **Produção Render:** continua com o serviço anterior. Este PR está em rascunho; não foi feito merge nem deploy.
 
+
+## Indicador percentual e planejamento de datas — 12/11/2026
+
+- A página pública Wix possui um quadro **Números disponíveis** com percentual (sem mostrar total absoluto) e quadro **Cronograma proposto**.
+- O percentual é mantido **indisponível enquanto as inscrições estiverem fechadas**, para não criar escassez fictícia. Nenhuma data fictícia é anunciada como confirmada.
+- A futura API \`GET /api/draw/progress\` foi adicionada ao \`draw-route.mjs\` deste PR: retorna somente \`{open,remainingPercent}\`, sem número total, nome, telefone ou contagens absolutas.
+- O cálculo é \`round(1000 * (total - distribuídos) / total)/10\`; utiliza os registros reais da tabela \`refrigeracao_draw_allocations\`.
+- Testes simulados de \`68%\`, \`0%\`, campanha fechada e origem rejeitada passaram. **Endpoint ainda não implantado no Render.**
+- **Planejamento interno sujeito à autorização:** início provisório 15/01/2027; encerramento 28/02/2027; apuração 05/03/2027; instalação até 04/04/2027. Nenhuma data foi publicada como compromisso oficial.
+- **Pendência jurídica essencial:** a SPA/MF esclarece que a venda de números por empresas caracteriza rifa não autorizada; promoções comerciais autorizadas são gratuitas para o participante. A lista de prêmios permitidos não enumera instalação de serviços isolados. Antes de seguir, confirmar formalmente o enquadramento do prêmio com o órgão competente e elaborar uma mecânica regular.
+- **Valores informados apenas para orçamento interno:** mão de obra R$ 1.600; materiais R$ 400; deslocamento R$ 100; despesas diversas R$ 100; custos R$ 2.200; lucro adicional desejado R$ 1.200; alvo R$ 3.400, sem incluir tributos/taxas. Não usar esse orçamento como estrutura de venda de números.
+
 ## Pendências bloqueantes para abrir inscrições
 
 1. Validar o provedor e o fluxo de **verificação da titularidade do WhatsApp**; captcha por si só não comprova que o número pertence ao participante, então há risco de inscrição indevida em nome de terceiros.
