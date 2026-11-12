@@ -4,7 +4,7 @@ Implementação para a campanha de instalação profissional de Split Inverter 9
 
 ## Propriedades garantidas pelo servidor
 
-- Uma solicitação aceita recebe **exatamente** a quantidade pedida; caso contrário, a transação faz ROLLBACK e **não registra nenhum número**.
+- Uma solicitação aceita recebe **exatamente um número**; uma quantidade diferente de 1 é rejeitada no servidor e não gera cadastro. Em caso de falha, a transação faz ROLLBACK.
 - A linha da campanha é bloqueada com `SELECT ... FOR UPDATE`, serializando inscrições simultâneas.
 - A chave primária composta `(campaign_id,number)` impede distribuição do mesmo número a dois cadastros.
 - `(campaign_id,phone_e164)` evita múltiplos cadastros do mesmo número de WhatsApp.
@@ -18,7 +18,7 @@ Implementação para a campanha de instalação profissional de Split Inverter 9
 - **Banco Neon de produção:** migração aplicada à branch principal `br-rough-voice-b62bd1l8`; as três tabelas do sorteio estão criadas.
 - **Campanha Neon:** `registration_open=false`; zero cadastros e zero números atribuídos na verificação.
 - **Wix CMS legado:** foram verificados `NumerosInstalacaoTeste2026` e `CadastrosInstalacaoTeste2026`; ambos estavam com zero registros.
-- **Página Wix pública:** seleção livre de quantidade, sem grade de números, dados pessoais desabilitados enquanto fechado; o formulário chama apenas a API transacional depois de liberado.
+- **Página Wix pública:** agora apresenta um número por cadastro, sem botões de escolha de quantidades nem grade de números; os dados pessoais continuam desabilitados enquanto fechado. O formulário chama apenas a API transacional depois de liberado.
 - **Painel próprio:** frontend `/painel/sorteio` e API `/painel/api/draw/overview` incluídos NESTE PR; exigem autenticação administrativa existente no Render e ainda não estão implantados em produção.
 - **Produção Render:** continua com o serviço anterior. Este PR está em rascunho; não foi feito merge nem deploy.
 
@@ -56,3 +56,11 @@ Implementação para a campanha de instalação profissional de Split Inverter 9
 **Atenção:** um link de `wa.me` só preenche mensagem, não envia automaticamente notificação ao organizador. WhatsApp automático exige canal transacional configurado e regras da Meta/fornecedor.
 
 A confirmação de dados pessoais deve ficar limitada ao titular e ao administrador; não publicar telefones nem listas de inscritos na página pública.
+
+## Revisão de experiência (12/11/2026)
+
+- Retirados os presets de 5, 10, 20 e 30 números para a campanha promocional de participação sem valores.
+- Distribuição definida em **1 número por cadastro** para não concentrar chances em quem seleciona mais. O backend rejeita qualquer quantidade diferente de 1, independentemente do que o navegador tente enviar.
+- Continua necessária verificação efetiva da titularidade do telefone: unicidade por telefone não prova que se trata de uma pessoa distinta.
+- Barra de percentual ampliada, avisos repetidos reduzidos e acesso do organizador redirecionado à Central de Operações existente. O módulo de sorteio no Render continua em PR não implantada; inscrições fechadas.
+- Página pública sem informações de valores, inclusive sem exibição de preço, Pix ou menção a participação gratuita.
