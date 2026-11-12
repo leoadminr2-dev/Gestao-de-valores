@@ -26,8 +26,8 @@ export function validateEntry(raw) {
   if (!/^\+55\d{10,11}$/.test(phone)) {
     throw new DrawError("Informe um WhatsApp válido com DDD.", 400, "INVALID_PHONE");
   }
-  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 500) {
-    throw new DrawError("Informe uma quantidade entre 1 e 500.", 400, "INVALID_QUANTITY");
+  if (!Number.isSafeInteger(quantity) || quantity !== 1) {
+    throw new DrawError("Cada cadastro recebe apenas um número de participação.", 400, "INVALID_QUANTITY");
   }
   if (!UUID_PATTERN.test(requestId)) {
     throw new DrawError("Identificador de solicitação inválido.", 400, "INVALID_REQUEST_ID");
