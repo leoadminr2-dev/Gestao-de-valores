@@ -22,7 +22,7 @@ export function relevantYCloudEvent(event,businessNumber) {
   if(phone(msg.to)!==sender||msg.groupId)return null;
   const customer=phone(msg.from);
   if(customer.length<10||customer.length>15||customer===sender)return null;
-  if(!["text","image","interactive","button"].includes(msg.type))return null;
+  if(!["text","image","video","interactive","button"].includes(msg.type))return null;
   const text=msg.type==="text"?String(msg.text?.body||""):"";
   return {id:event.id,kind:"incoming",phone:customer,messageId:String(msg.id||event.id).slice(0,240),messageType:msg.type,text:text.slice(0,1000)};
  }
