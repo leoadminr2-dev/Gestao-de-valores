@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {advance,price} from "./bot.mjs";
+import {advance,price,closingMessage} from "./bot.mjs";
 const empty={stage:"menu",mode:"bot",data:{}};
 test("boas-vindas não anunciam preços",()=>{const r=advance(empty,{text:"olá"});assert.match(r.reply,/Como podemos ajudar/);assert.doesNotMatch(r.reply,/R\$\s*\d/);});
 test("consultas explícitas mostram somente valores iniciais",()=>{assert.match(price("preço limpeza"),/R\$ 280/);assert.match(price("troca compressor"),/R\$ 550/);});
@@ -151,4 +151,61 @@ test("enquanto a transferência humana está pendente o robô não faz novas per
  const reset=advance({stage:"menu",mode:"bot",data:{handoffPending:true}},{text:"MENU"});
  assert.equal(reset.mode,"bot");
  assert.match(reset.reply,/Como podemos ajudar/);
+});
+
+test("venda solicita foto e video imediatamente e so prossegue com os dois",()=>{
+ let r=advance(empty,{text:"2"});
+ r=advance(r,{text:"3"});
+ assert.equal(r.stage,"venda_midia");
+ assert.match(r.reply,/foto/i);assert.match(r.reply,/vídeo/i);
+ r=advance(r,{text:"Tenho uma Brastemp"});
+ assert.equal(r.stage,"venda_midia");
+ r=advance(r,{type:"image",text:""});
+ assert.equal(r.stage,"venda_midia");assert.match(r.reply,/falta.*vídeo/i);
+ r=advance(r,{type:"video",text:""});
+ assert.equal(r.stage,"nome");
+ assert.equal(r.data.fotos,1);assert.equal(r.data.videoRecebido,true);
+ r=advance(r,{text:"Marina Vieira"});
+ r=advance(r,{text:"Irajá, Rio de Janeiro"});
+ r=advance(r,{text:"Geladeira Brastemp 400L, funciona, 4 anos"});
+ r=advance(r,{text:"Fim da tarde"});
+ assert.equal(r.stage,"confirmar");assert.match(r.reply,/foto e vídeo enviados/i);
+ assert.equal(r.order,undefined);
+ r=advance(r,{text:"SIM"});
+ assert.equal(r.order.servico,"Venda de equipamento");
+ assert.equal(r.order.videoRecebido,true);
+});
+test("venda aceita video antes da foto e ignora midias sem virar nome",()=>{
+ let r=advance(advance(empty,{text:"7"}),{text:"2"});
+ r=advance(r,{type:"video",text:""});
+ assert.equal(r.stage,"venda_midia");assert.match(r.reply,/falta.*foto/i);
+ r=advance(r,{type:"image",text:""});
+ assert.equal(r.stage,"nome");assert.equal(r.data.videoRecebido,true);
+});
+test("video recebido em outros fluxos nao e confundido com resposta textual",()=>{
+ let r=advance(advance(empty,{text:"1"}),{text:"1"});
+ r=advance(r,{type:"video",text:""});
+ assert.equal(r.stage,"nome");
+ assert.match(r.reply,/Vídeo recebido/);
+});
+test("finalizacao informa o tecnico responsavel e saudacao em horario do Rio",()=>{
+ const protocol="WA-20261114-12345678";
+ for(const [date,saudacao] of [
+  ["2026-11-14T13:00:00.000Z","dia"],
+  ["2026-11-14T18:00:00.000Z","tarde"],
+  ["2026-11-15T01:00:00.000Z","noite"]
+ ]){
+  const msg=closingMessage(protocol,new Date(date));
+  assert.match(msg,/Leonardo Moreira/);
+  assert.match(msg,/entrará em contato em breve/);
+  assert.match(msg,new RegExp("ótim[ao] "+saudacao));
+ }
+});
+test("YCloud reconhece video do cliente comercial",()=>{
+ const evt={id:"evt_video_876",type:"whatsapp.inbound_message.received",whatsappInboundMessage:{
+   id:"wamid.abc",from:"+5521988887777",to:"+5521970338222",type:"video",video:{id:"media_123"}
+ }};
+ const result=relevantYCloudEvent(evt,"+5521970338222");
+ assert.equal(result?.messageType,"video");
+ assert.equal(result?.kind,"incoming");
 });
