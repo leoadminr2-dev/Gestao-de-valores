@@ -7,6 +7,7 @@ export const MENU = [
   "🔧 Instalação • Manutenção • Higienização",
   "",
   "Olá! 👋 Seja bem-vindo(a)!",
+  "Obrigado por entrar em contato com a *Leonardo Moreira Refrigeração*.",
   "",
   "*Como podemos ajudar hoje?*",
   "",
@@ -42,6 +43,11 @@ function human(stage, data) {
 }
 function orderFlow(servico, previous={}, extra={}) {
   const data={...previous,...extra,servico,fotos:Number(previous.fotos || 0)};
+  if(servico.startsWith("Venda")){
+    return {stage:"venda_midia",mode:"bot",data:{
+      ...data,fotos:0,videoRecebido:false
+    },reply:"♻️ *Vamos avaliar o equipamento que deseja vender!*\n\n📷 Envie pelo menos *1 foto* do equipamento (de preferência mostrando o estado geral).\n🎥 Envie também *1 vídeo curto* mostrando seu funcionamento ou o defeito.\n\nMande os dois aqui nesta conversa, em qualquer ordem. Depois vou pedir seus dados e detalhes do aparelho.\n\nPara voltar ao menu, digite *0*."};
+  }
   const isCompany=data.tipoAtendimento==="Empresarial";
   const intro=servico.startsWith("Compra") || servico.startsWith("Venda")
     ? "Vou organizar sua consulta, sem compromisso."
@@ -105,7 +111,7 @@ function askEquipment(data) {
   const t=norm(data.servico);
   if(t.includes("contrato"))return "Quantos equipamentos precisam de acompanhamento e de quais tipos? Informe também a frequência de manutenção ou limpeza que imagina ideal.";
   if(t.includes("compra"))return "Qual equipamento pretende comprar (geladeira, ar-condicionado ou máquina de lavar)? Conte suas preferências de modelo e capacidade.";
-  if(t.includes("venda"))return "Qual equipamento deseja vender? Se souber, informe marca, modelo, idade aproximada e estado de conservação. Você poderá mandar fotos nesta conversa.";
+  if(t.includes("venda"))return "Qual equipamento deseja vender? Informe, se possível, *marca, modelo, idade aproximada, estado de conservação* e se funciona normalmente ou apresenta defeito." ;
   if(t.includes("instalacao"))return "O ar-condicionado é *Split ou de janela*? Se souber, informe BTUs, marca e detalhes do local de instalação.";
   if(t.includes("limpeza"))return "O aparelho é *Split ou de janela*? Quantos aparelhos precisam de limpeza e há alguma situação específica (odor, sujeira, acesso difícil)?";
   return "Qual equipamento precisa de reparo: Split, ar de janela, geladeira, freezer ou máquina de lavar? Conte o que está acontecendo e, se souber, a marca/modelo.";
@@ -127,6 +133,7 @@ function review(data) {
     "Bairro / cidade: "+data.bairro,
     "Equipamento / detalhes: "+data.equipamento,
     "Preferência: "+data.preferencia,
+    ...(norm(data.servico).includes("venda") ? ["Imagens: foto e vídeo enviados nesta conversa do WhatsApp"] : []),
     "",
     "Para autorizar o registro desses dados para o atendimento, responda *SIM*.",
     "Para desistir, responda *CANCELAR*.",
@@ -147,9 +154,20 @@ export function advance(session, incoming) {
     return {stage:"menu",mode:"bot",data:{},reply:"Tudo bem, sem problema. Não registrei nenhum novo pedido.\n\n"+MENU};
   if(/cheiro de queimado|fumaca|faisca|choque eletrico|principio de incendio/.test(t))
     return {stage,mode:"human",data,reply:"⚠️ Sinto muito por essa situação. Por segurança, pare de usar o equipamento e, se puder fazer isso sem risco, desligue a energia. Havendo fogo ou perigo imediato, acione a emergência. Não tente abrir ou reparar o aparelho. Vou deixar a conversa para Leonardo avaliar seu relato."};
-  if(incoming?.type==="image") {
-    data.fotos=Math.min(3,Number(data.fotos||0)+1);
-    return {stage,mode,data,reply:"📷 Obrigado pela foto! Ela pode ajudar Leonardo a entender a situação. "+(stage==="menu"?"Conte também o que está acontecendo com o equipamento.\n\n"+MENU:"Pode continuar com as informações que estávamos preenchendo.")};
+  if(stage==="venda_midia"){
+    if(incoming?.type==="image") data.fotos=Math.min(20,Number(data.fotos||0)+1);
+    if(incoming?.type==="video") data.videoRecebido=true;
+    if(Number(data.fotos||0)>0 && data.videoRecebido===true){
+      return {stage:"nome",mode,data,reply:"✅ *Foto e vídeo recebidos!* Obrigado por enviar as imagens para avaliação.\n\nComo posso chamar você? Informe seu nome, por favor."};
+    }
+    if(Number(data.fotos||0)===0){
+      return {stage,mode,data,reply:"🎥 Vídeo recebido! Para continuar, falta enviar *uma foto* do equipamento aqui na conversa."};
+    }
+    return {stage,mode,data,reply:"📷 Foto recebida! Para continuar, falta enviar *um vídeo* mostrando o aparelho."};
+  }
+  if(incoming?.type==="image" || incoming?.type==="video") {
+    if(incoming.type==="image")data.fotos=Math.min(20,Number(data.fotos||0)+1);
+    return {stage,mode,data,reply:(incoming.type==="image"?"📷 Foto":"🎥 Vídeo")+" recebido! Leonardo poderá visualizar na conversa. "+(stage==="menu"?"Conte também o que está acontecendo com o equipamento.\n\n"+MENU:"Pode continuar com as informações que estávamos preenchendo.")};
   }
   if(/(plataforma|acessar o site|acessar plataforma|link do site|formulario online|agendar online)/.test(t))
     return {stage,mode,data,reply:"🌐 Claro! Você pode acessar nossa plataforma por aqui:\n"+PLATFORM_URL+"\n\nLá é possível enviar uma solicitação de atendimento e obter um protocolo. Se preferir, podemos continuar pelo WhatsApp. A visita depende de confirmação."};
@@ -235,4 +253,10 @@ export function advance(session, incoming) {
     return {stage,mode,data,reply:"Para proteger seus dados, só registro a solicitação com sua autorização. Responda *SIM* para registrar ou *CANCELAR* para desistir."};
   }
   return {stage:"menu",mode:"bot",data:{},reply:MENU};
+}
+
+export function closingMessage(protocol,when=new Date()) {
+  const hour=Number(new Intl.DateTimeFormat("en-GB",{timeZone:"America/Sao_Paulo",hour:"2-digit",hourCycle:"h23"}).format(when));
+  const greeting=hour>=5&&hour<12?"um ótimo dia":hour>=12&&hour<18?"uma ótima tarde":"uma ótima noite";
+  return "✅ *Solicitação recebida!*\nProtocolo: *"+protocol+"*\n\nO técnico *Leonardo Moreira*, responsável pelo atendimento, entrará em contato em breve para avaliar o pedido. Nenhuma compra ou valor está confirmado.\n\nObrigado pelo contato e tenha "+greeting+"!";
 }
