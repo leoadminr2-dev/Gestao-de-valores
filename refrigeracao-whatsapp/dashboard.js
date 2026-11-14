@@ -229,6 +229,8 @@ function renderDetail(o){
  text("detailService",o.payload?.servico||"Não informado");
  text("detailEquipment",o.payload?.equipamento||"Não informado");
  text("detailMedia",String(o.payload?.servico||"").startsWith("Venda") ? (Number(o.payload?.fotos||0)>0&&o.payload?.videoRecebido===true ? "📷 Foto e 🎥 vídeo recebidos — abra o WhatsApp abaixo" : "Aguardando evidências") : "Não se aplica");
+ text("detailAskingPrice",String(o.payload?.servico||"").startsWith("Venda")?(o.payload?.valorPretendido||"Não informado"):"Não se aplica");
+ text("detailNegotiable",String(o.payload?.servico||"").startsWith("Venda")?(o.payload?.valorNegociavel||"Não informado"):"Não se aplica");
  text("detailDistrict",o.payload?.bairro||"Não informado");
  text("detailPreference",o.payload?.preferencia||"A combinar");
  text("detailCreated",dateText(o.created_at));

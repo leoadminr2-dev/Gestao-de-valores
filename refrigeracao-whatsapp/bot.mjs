@@ -75,6 +75,8 @@ function initialIntent(t, previous={}) {
     return {stage:"empresa_escolha",mode:"bot",data:{...previous,tipoAtendimento:"Empresarial"},reply:BUSINESS_MENU};
   if(t==="4" || /agendamento|agendar|acompanhar|protocolo|andamento do pedido/.test(t))
     return {stage:"agenda_escolha",mode:"bot",data:{...previous},reply:SCHEDULE_MENU};
+  if(/\b(quero|pretendo|gostaria|preciso)\s+vender\b/.test(t)) return orderFlow("Venda de equipamento",previous);
+  if(/\b(quero|pretendo|gostaria|preciso)\s+comprar\b/.test(t)) return orderFlow("Compra de equipamento",previous);
   if(t==="7" || /compra e venda|comprar|vender/.test(t))
     return {stage:"mercado",mode:"bot",data:{...previous},reply:MARKET_MENU};
   if(t==="8")return {stage:"protocolo",mode:"bot",data:{...previous},reply:"🧾 Envie o protocolo da solicitação. Se não tiver, informe seu nome e bairro. Leonardo verificará o andamento antes de informar qualquer status."};
@@ -109,18 +111,19 @@ export function price(text, selected="") {
 }
 function askEquipment(data) {
   const t=norm(data.servico);
-  if(t.includes("contrato"))return "Quantos equipamentos precisam de acompanhamento e de quais tipos? Informe também a frequência de manutenção ou limpeza que imagina ideal.";
-  if(t.includes("compra"))return "Qual equipamento pretende comprar (geladeira, ar-condicionado ou máquina de lavar)? Conte suas preferências de modelo e capacidade.";
-  if(t.includes("venda"))return "Qual equipamento deseja vender? Informe, se possível, *marca, modelo, idade aproximada, estado de conservação* e se funciona normalmente ou apresenta defeito." ;
-  if(t.includes("instalacao"))return "O ar-condicionado é *Split ou de janela*? Se souber, informe BTUs, marca e detalhes do local de instalação.";
-  if(t.includes("limpeza"))return "O aparelho é *Split ou de janela*? Quantos aparelhos precisam de limpeza e há alguma situação específica (odor, sujeira, acesso difícil)?";
-  return "Qual equipamento precisa de reparo: Split, ar de janela, geladeira, freezer ou máquina de lavar? Conte o que está acontecendo e, se souber, a marca/modelo.";
+  if(t.includes("contrato"))return "Quantos equipamentos precisam de atendimento, de quais tipos e com qual frequência de limpeza ou manutenção? Informe também os principais problemas, se houver.";
+  if(t.includes("compra"))return "Qual equipamento deseja comprar (geladeira, freezer, ar-condicionado ou máquina de lavar)? Diga a capacidade, voltagem e faixa de orçamento desejadas, se souber.";
+  if(t.includes("venda"))return "Qual equipamento deseja vender? Informe *tipo, marca, modelo, idade aproximada, estado de conservação, defeito (se houver) e se já passou por conserto*.";
+  if(t.includes("instalacao"))return "Seu ar-condicionado é *Split ou de janela*? Informe os BTUs e, se souber, a voltagem. Já há ponto elétrico, suporte e tubulação? Se puder, envie foto do local.";
+  if(t.includes("limpeza"))return "O aparelho é *Split ou de janela*? Quantos precisam de limpeza? Há mau cheiro, sujeira intensa, gotejamento ou dificuldade de acesso? Foto é bem-vinda.";
+  return "Qual equipamento precisa de manutenção (Split, ar de janela, geladeira, freezer ou máquina de lavar)? Informe marca/modelo e o defeito. Se puder, envie foto da etiqueta ou vídeo curto do problema.";
 }
 function askPreference(data) {
-  return /compra|venda/.test(norm(data.servico))
-    ? "Obrigado! Qual período é melhor para Leonardo entrar em contato e conversar sobre a negociação?"
+  if(norm(data.servico).includes("venda"))return "Qual período é melhor para Leonardo entrar em contato? O equipamento está disponível para retirada no bairro informado?";
+  return /compra/.test(norm(data.servico))
+    ? "Qual período é melhor para Leonardo entrar em contato e confirmar a disponibilidade?"
     : /contrato/.test(norm(data.servico))
-    ? "Você prefere receber um contato para planejar a proposta ou sugerir uma data para avaliação no local? A disponibilidade será confirmada."
+    ? "Você prefere contato para planejar a proposta ou quer sugerir uma data de avaliação no local? A disponibilidade será confirmada."
     : "Qual dia ou período seria melhor para uma visita? É apenas uma preferência: Leonardo confirmará a disponibilidade antes de agendar.";
 }
 function review(data) {
@@ -132,6 +135,7 @@ function review(data) {
     "Contato: "+data.cliente,
     "Bairro / cidade: "+data.bairro,
     "Equipamento / detalhes: "+data.equipamento,
+    ...(norm(data.servico).includes("venda") ? ["Valor pretendido pelo vendedor: "+(data.valorPretendido||"Não informado"),"Valor negociável: "+(data.valorNegociavel||"Não informado")] : []),
     "Preferência: "+data.preferencia,
     ...(norm(data.servico).includes("venda") ? ["Imagens: foto e vídeo enviados nesta conversa do WhatsApp"] : []),
     "",
@@ -168,6 +172,32 @@ export function advance(session, incoming) {
   if(incoming?.type==="image" || incoming?.type==="video") {
     if(incoming.type==="image")data.fotos=Math.min(20,Number(data.fotos||0)+1);
     return {stage,mode,data,reply:(incoming.type==="image"?"📷 Foto":"🎥 Vídeo")+" recebido! Leonardo poderá visualizar na conversa. "+(stage==="menu"?"Conte também o que está acontecendo com o equipamento.\n\n"+MENU:"Pode continuar com as informações que estávamos preenchendo.")};
+  }
+  if(stage==="venda_valor"){
+    const aCombinar=/^(a combinar|a negociar|nao sei|sem valor definido|prefiro conversar)$/.test(t);
+    if(aCombinar){
+      data.valorPretendido="A combinar";
+      data.valorPretendidoNumero=null;
+      data.valorNegociavel="A combinar";
+      return {stage:"preferencia",mode,data,reply:askPreference(data)};
+    }
+    const match=t.match(/(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?|\d+(?:\.\d{1,2})?)/);
+    const token=match?.[1]||"";
+    const valor=token.includes(",")?Number(token.replace(/\./g,"").replace(",",".")):
+      /^\d{1,3}(?:\.\d{3})+$/.test(token)?Number(token.replace(/\./g,"")):Number(token);
+    if(!token||!Number.isFinite(valor)||valor<=0||valor>999999.99){
+      return {stage,mode,data,reply:"💰 Qual *valor em reais* você pretende receber pelo equipamento? Exemplo: *R$ 1.500,00*. Se ainda não souber, responda *A COMBINAR*."};
+    }
+    data.valorPretendidoNumero=Math.round(valor*100)/100;
+    data.valorPretendido=new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(data.valorPretendidoNumero);
+    return {stage:"venda_negociavel",mode,data,reply:"Obrigado! Registrei o valor pretendido de *"+data.valorPretendido+"*.\n\nEsse valor é negociável? Responda *SIM* ou *NÃO*."};
+  }
+  if(stage==="venda_negociavel"){
+    if(/^(sim|s|negociavel|pode negociar)$/.test(t))data.valorNegociavel="Sim";
+    else if(/^(nao|n|nao negociavel)$/.test(t))data.valorNegociavel="Não";
+    else if(/^(a combinar|a negociar)$/.test(t))data.valorNegociavel="A combinar";
+    else return {stage,mode,data,reply:"O valor pretendido é negociável? Responda *SIM*, *NÃO* ou *A COMBINAR*."};
+    return {stage:"preferencia",mode,data,reply:askPreference(data)};
   }
   if(/(plataforma|acessar o site|acessar plataforma|link do site|formulario online|agendar online)/.test(t))
     return {stage,mode,data,reply:"🌐 Claro! Você pode acessar nossa plataforma por aqui:\n"+PLATFORM_URL+"\n\nLá é possível enviar uma solicitação de atendimento e obter um protocolo. Se preferir, podemos continuar pelo WhatsApp. A visita depende de confirmação."};
@@ -238,6 +268,7 @@ export function advance(session, incoming) {
   if(stage==="equipamento"){
     if(raw.length<3)return {stage,mode,data,reply:"Conte um pouco mais sobre o equipamento ou a necessidade, por favor."};
     data.equipamento=raw.slice(0,500);
+    if(norm(data.servico).includes("venda"))return {stage:"venda_valor",mode,data,reply:"💰 *Qual valor você pretende receber pelo equipamento?* Informe o valor em reais (por exemplo, R$ 1.500,00). Se ainda não definiu, responda *A COMBINAR*."};
     return {stage:"preferencia",mode,data,reply:askPreference(data)};
   }
   if(stage==="preferencia"){

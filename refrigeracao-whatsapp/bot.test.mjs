@@ -168,11 +168,18 @@ test("venda solicita foto e video imediatamente e so prossegue com os dois",()=>
  r=advance(r,{text:"Marina Vieira"});
  r=advance(r,{text:"Irajá, Rio de Janeiro"});
  r=advance(r,{text:"Geladeira Brastemp 400L, funciona, 4 anos"});
+ assert.equal(r.stage,"venda_valor");
+ r=advance(r,{text:"R$ 1.500,00"});
+ assert.equal(r.stage,"venda_negociavel");
+ r=advance(r,{text:"SIM"});
+ assert.equal(r.stage,"preferencia");
  r=advance(r,{text:"Fim da tarde"});
  assert.equal(r.stage,"confirmar");assert.match(r.reply,/foto e vídeo enviados/i);
  assert.equal(r.order,undefined);
  r=advance(r,{text:"SIM"});
  assert.equal(r.order.servico,"Venda de equipamento");
+ assert.equal(r.order.valorPretendido,"R$ 1.500,00");
+ assert.equal(r.order.valorNegociavel,"Sim");
  assert.equal(r.order.videoRecebido,true);
 });
 test("venda aceita video antes da foto e ignora midias sem virar nome",()=>{
@@ -208,4 +215,42 @@ test("YCloud reconhece video do cliente comercial",()=>{
  const result=relevantYCloudEvent(evt,"+5521970338222");
  assert.equal(result?.messageType,"video");
  assert.equal(result?.kind,"incoming");
+});
+
+test("venda exige valor pretendido e registra a negociabilidade sem confundir com orçamento do técnico",()=>{
+ let r=advance(advance(empty,{text:"2"}),{text:"3"});
+ r=advance(r,{type:"video",text:""});
+ r=advance(r,{type:"image",text:""});
+ r=advance(r,{text:"Marcos"});
+ r=advance(r,{text:"Penha, Rio de Janeiro"});
+ r=advance(r,{text:"Lavadora 10 kg funcionando"});
+ assert.equal(r.stage,"venda_valor");
+ r=advance(r,{text:"valor 1200"});
+ assert.equal(r.stage,"venda_negociavel");
+ assert.equal(r.data.valorPretendidoNumero,1200);
+ r=advance(r,{text:"não"});
+ assert.equal(r.data.valorNegociavel,"Não");
+ r=advance(r,{text:"Noite, posso entregar"});
+ assert.match(r.reply,/Valor pretendido pelo vendedor: R\$/);
+ r=advance(r,{text:"SIM"});
+ assert.equal(r.order.valorPretendidoNumero,1200);
+ assert.equal(r.order.valorNegociavel,"Não");
+});
+test("venda aceita preço a combinar e não prende o cliente sem valor definido",()=>{
+ let r=advance(advance(empty,{text:"2"}),{text:"3"});
+ r=advance(r,{type:"image",text:""});
+ r=advance(r,{type:"video",text:""});
+ r=advance(r,{text:"Rosa"});
+ r=advance(r,{text:"Cascadura"});
+ r=advance(r,{text:"Freezer Electrolux não gela"});
+ r=advance(r,{text:"a combinar"});
+ assert.equal(r.stage,"preferencia");
+ assert.equal(r.data.valorPretendido,"A combinar");
+ assert.equal(r.data.valorNegociavel,"A combinar");
+});
+test("pedido direto de venda pula submenu e preserva exigência de mídias",()=>{
+ const r=advance(empty,{text:"Quero vender minha geladeira"});
+ assert.equal(r.stage,"venda_midia");
+ assert.match(r.reply,/foto/i);
+ assert.match(r.reply,/vídeo/i);
 });

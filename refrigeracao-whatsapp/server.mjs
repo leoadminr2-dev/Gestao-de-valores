@@ -178,7 +178,7 @@ async function wixInsert(order){
     +(d.tipoAtendimento?"Atendimento: "+String(d.tipoAtendimento)+". ":"")
     +(d.empresa?"Empresa: "+String(d.empresa)+". ":"")
     +"Preferência de atendimento ou retorno: "+String(d.preferencia||"A combinar")
-    +(String(d.servico||"").startsWith("Venda")?". Foto e vídeo recebidos no WhatsApp comercial para avaliação do equipamento; visualizar diretamente na conversa.":"")).slice(0,1500),
+    +(String(d.servico||"").startsWith("Venda")?". Valor pretendido pelo vendedor: "+String(d.valorPretendido||"Não informado")+". Negociável: "+String(d.valorNegociavel||"Não informado")+". Foto e vídeo recebidos no WhatsApp comercial para avaliação do equipamento; visualizar diretamente na conversa.":"")).slice(0,1500),
   origem:"WhatsApp Business Platform",
   periodoPreferido:String(d.preferencia||"A combinar"),
   status:"Novo pedido",
