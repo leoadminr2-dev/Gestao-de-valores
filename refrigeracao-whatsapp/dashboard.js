@@ -228,6 +228,7 @@ function renderDetail(o){
  const badge=el("detailBadge");badge.className="pill "+(o.operation_status||"novo");badge.textContent=labels[o.operation_status]||"Novo pedido";
  text("detailService",o.payload?.servico||"Não informado");
  text("detailEquipment",o.payload?.equipamento||"Não informado");
+ text("detailMedia",String(o.payload?.servico||"").startsWith("Venda") ? (Number(o.payload?.fotos||0)>0&&o.payload?.videoRecebido===true ? "📷 Foto e 🎥 vídeo recebidos — abra o WhatsApp abaixo" : "Aguardando evidências") : "Não se aplica");
  text("detailDistrict",o.payload?.bairro||"Não informado");
  text("detailPreference",o.payload?.preferencia||"A combinar");
  text("detailCreated",dateText(o.created_at));
