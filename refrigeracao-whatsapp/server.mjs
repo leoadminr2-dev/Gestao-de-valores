@@ -1,7 +1,7 @@
 import http from "node:http";
 import crypto from "node:crypto";
 import pg from "pg";
-import {advance} from "./bot.mjs";
+import {advance,closingMessage} from "./bot.mjs";
 import {shouldHandleMessage,isProtectedPhone} from "./selective.mjs";
 import {appReplyPhones} from "./coexistence.mjs";
 import {verifyYCloudSignature,relevantYCloudEvent} from "./ycloud.mjs";
@@ -89,7 +89,7 @@ async function handleInbound(message){
   if(move.order){
    const protocol=newProtocol();
    await db.query("INSERT INTO wa_orders (protocol,phone,payload) VALUES($1,$2,$3)",[protocol,phone,JSON.stringify(move.order)]);
-   reply="✅ Solicitação recebida!\nProtocolo: *"+protocol+"*\n\nVamos avaliar seu pedido e confirmar a disponibilidade do atendimento. O horário solicitado *não está confirmado*. Obrigado por procurar a Leonardo Moreira Refrigeração!";
+   reply=closingMessage(protocol);
   }
   await db.query("UPDATE wa_sessions SET stage=$2,mode=$3,data=$4,last_message_at=now(),updated_at=now() WHERE phone=$1",[phone,move.stage,persistedMode,JSON.stringify(persistedData)]);
   if(reply)await db.query("INSERT INTO wa_outbound (incoming_message_id,phone,message) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",[messageId,phone,reply]);
@@ -177,7 +177,8 @@ async function wixInsert(order){
   descricao:("Solicitação recebida pelo WhatsApp oficial. "
     +(d.tipoAtendimento?"Atendimento: "+String(d.tipoAtendimento)+". ":"")
     +(d.empresa?"Empresa: "+String(d.empresa)+". ":"")
-    +"Preferência de atendimento ou retorno: "+String(d.preferencia||"A combinar")).slice(0,1500),
+    +"Preferência de atendimento ou retorno: "+String(d.preferencia||"A combinar")
+    +(String(d.servico||"").startsWith("Venda")?". Foto e vídeo recebidos no WhatsApp comercial para avaliação do equipamento; visualizar diretamente na conversa.":"")).slice(0,1500),
   origem:"WhatsApp Business Platform",
   periodoPreferido:String(d.preferencia||"A combinar"),
   status:"Novo pedido",
@@ -322,7 +323,7 @@ const server=http.createServer(async(req,res)=>{
     if(String(value.metadata?.phone_number_id||"")!==PHONE_NUMBER_ID)continue;
     if(change.field!=="messages")continue;
     for(const message of value.messages||[]){
-     if(!["text","image","interactive","button"].includes(message.type))continue;
+     if(!["text","image","video","interactive","button"].includes(message.type))continue;
      await handleInbound(message);
      processed++;
     }
