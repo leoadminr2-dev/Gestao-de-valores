@@ -45,7 +45,7 @@ function orderFlow(servico, previous={}, extra={}) {
   const data={...previous,...extra,servico,fotos:Number(previous.fotos || 0)};
   if(servico.startsWith("Venda")){
     return {stage:"venda_midia",mode:"bot",data:{
-      ...data,fotos:0,videoRecebido:false
+      ...data,fotos:0,videoRecebido:false,mediaItems:[]
     },reply:"♻️ *Vamos avaliar o equipamento que deseja vender!*\n\n📷 Envie pelo menos *1 foto* do equipamento (de preferência mostrando o estado geral).\n🎥 Envie também *1 vídeo curto* mostrando seu funcionamento ou o defeito.\n\nMande os dois aqui nesta conversa, em qualquer ordem. Depois vou pedir seus dados e detalhes do aparelho.\n\nPara voltar ao menu, digite *0*."};
   }
   const isCompany=data.tipoAtendimento==="Empresarial";
@@ -159,6 +159,12 @@ export function advance(session, incoming) {
   if(/cheiro de queimado|fumaca|faisca|choque eletrico|principio de incendio/.test(t))
     return {stage,mode:"human",data,reply:"⚠️ Sinto muito por essa situação. Por segurança, pare de usar o equipamento e, se puder fazer isso sem risco, desligue a energia. Havendo fogo ou perigo imediato, acione a emergência. Não tente abrir ou reparar o aparelho. Vou deixar a conversa para Leonardo avaliar seu relato."};
   if(stage==="venda_midia"){
+    const m=incoming?.media;
+    if(m&&m.type===incoming.type&&["image","video"].includes(incoming.type)&&["ycloud","meta"].includes(m.provider)&&/^[A-Za-z0-9_-]{1,160}$/.test(String(m.id||""))){
+      const item={provider:m.provider,type:m.type,id:String(m.id),link:String(m.link||"").slice(0,4096),mimeType:String(m.mimeType||"").slice(0,80)};
+      const list=Array.isArray(data.mediaItems)?data.mediaItems:[];
+      data.mediaItems=[...list.filter(x=>x?.id!==item.id),item].slice(-10);
+    }
     if(incoming?.type==="image") data.fotos=Math.min(20,Number(data.fotos||0)+1);
     if(incoming?.type==="video") data.videoRecebido=true;
     if(Number(data.fotos||0)>0 && data.videoRecebido===true){

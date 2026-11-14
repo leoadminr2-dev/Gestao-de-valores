@@ -57,7 +57,7 @@ function security(res){
  res.setHeader("x-frame-options","DENY");
  res.setHeader("referrer-policy","no-referrer");
  res.setHeader("cache-control","private, no-store");
- res.setHeader("content-security-policy","default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+ res.setHeader("content-security-policy","default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; media-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
 }
 async function bodyJSON(req){
  const chunks=[];let count=0;
@@ -146,6 +146,32 @@ export function createDashboard(pool,replyOptions={}){
     }
    }catch(e){answer(res,e.status||500,{error:String(e.message||"erro_envio")});}
    return true;
+  }
+  const mediaMatch=url.pathname.match(/^\/painel\/api\/media\/(WA-[A-Z0-9-]{8,64})\/(\d{1,2})$/);
+  if(mediaMatch&&req.method==="GET"){
+   const rows=await pool.query("SELECT payload FROM wa_orders WHERE protocol=$1",[mediaMatch[1]]);
+   const list=rows.rows[0]?.payload?.mediaItems;
+   const item=Array.isArray(list)?list[Number(mediaMatch[2])]:null;
+   if(!item||item.provider!=="ycloud"||!["image","video"].includes(item.type)){answer(res,404,{error:"midia_indisponivel"});return true;}
+   if(!process.env.YCLOUD_API_KEY){answer(res,503,{error:"midia_nao_configurada"});return true;}
+   let link;try{link=new URL(String(item.link||""))}catch{}
+   if(!link||link.protocol!=="https:"||link.hostname!=="api.ycloud.com"||!/^\/v2\/whatsapp\/media\/download\/[A-Za-z0-9_-]+$/.test(link.pathname)){
+    answer(res,404,{error:"referencia_invalida"});return true;
+   }
+   const mime=String(item.mimeType||"").split(";")[0].toLowerCase();
+   if(!(item.type==="image"?["image/jpeg","image/png","image/webp"]:["video/mp4","video/3gpp"]).includes(mime)){
+    answer(res,415,{error:"formato_nao_suportado"});return true;
+   }
+   try{
+    const response=await fetch(link,{headers:{"X-API-Key":process.env.YCLOUD_API_KEY},redirect:"error",signal:AbortSignal.timeout(30000)});
+    if(!response.ok){answer(res,[401,404].includes(response.status)?410:502,{error:"arquivo_indisponivel_conferir_whatsapp"});return true;}
+    const max=20*1024*1024;
+    if(Number(response.headers.get("content-length")||0)>max){answer(res,413,{error:"arquivo_muito_grande"});return true;}
+    let bytes=0;const chunks=[];
+    for await(const c of response.body){bytes+=c.length;if(bytes>max){answer(res,413,{error:"arquivo_muito_grande"});return true;}chunks.push(Buffer.from(c));}
+    res.writeHead(200,{"content-type":mime,"content-disposition":"inline","cache-control":"private, no-store","x-content-type-options":"nosniff"});
+    res.end(Buffer.concat(chunks));return true;
+   }catch{answer(res,502,{error:"falha_ao_carregar_midia"});return true;}
   }
   if(url.pathname==="/painel/api/overview"&&req.method==="GET"){
    const [metrics,data]=await Promise.all([

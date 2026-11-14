@@ -230,6 +230,27 @@ function renderDetail(o){
  text("detailEquipment",o.payload?.equipamento||"Não informado");
  text("detailMedia",String(o.payload?.servico||"").startsWith("Venda") ? (Number(o.payload?.fotos||0)>0&&o.payload?.videoRecebido===true ? "📷 Foto e 🎥 vídeo recebidos — abra o WhatsApp abaixo" : "Aguardando evidências") : "Não se aplica");
  text("detailAskingPrice",String(o.payload?.servico||"").startsWith("Venda")?(o.payload?.valorPretendido||"Não informado"):"Não se aplica");
+  const sale=String(o.payload?.servico||"").startsWith("Venda");
+  const gallery=el("mediaGallery"),grid=el("mediaGalleryGrid"),note=el("mediaGalleryNote");
+  const items=Array.isArray(o.payload?.mediaItems)?o.payload.mediaItems:[];
+  gallery.hidden=!sale;grid.replaceChildren();
+  if(sale){
+   const list=items.map((item,index)=>({item,index})).filter(x=>x.item?.provider==="ycloud"&&["image","video"].includes(x.item.type));
+   note.textContent=list.length?"Arquivos recebidos pelo WhatsApp. O acesso pode expirar após 30 dias.":"Nenhum arquivo disponível para esta ordem. Para mensagens antigas, abra a conversa no WhatsApp.";
+   for(const {item,index} of list){
+    const box=document.createElement("figure");box.className="evidence-tile";
+    const path="/painel/api/media/"+encodeURIComponent(o.protocol)+"/"+index;
+    if(item.type==="image"){
+     const a=document.createElement("a");a.href=path;a.target="_blank";a.rel="noopener noreferrer";
+     const img=document.createElement("img");img.loading="lazy";img.alt="Foto do equipamento";img.src=path;
+     img.onerror=()=>{img.alt="Foto indisponível; consulte o WhatsApp."};a.append(img);box.append(a);
+    }else{
+     const v=document.createElement("video");v.controls=true;v.preload="none";v.src=path;v.setAttribute("aria-label","Vídeo do equipamento");box.append(v);
+    }
+    const c=document.createElement("figcaption");c.textContent=item.type==="image"?"📷 Foto "+(index+1):"🎥 Vídeo "+(index+1);box.append(c);grid.append(box);
+   }
+  }
+
  text("detailNegotiable",String(o.payload?.servico||"").startsWith("Venda")?(o.payload?.valorNegociavel||"Não informado"):"Não se aplica");
  text("detailDistrict",o.payload?.bairro||"Não informado");
  text("detailPreference",o.payload?.preferencia||"A combinar");

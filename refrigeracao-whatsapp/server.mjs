@@ -58,7 +58,9 @@ function msgText(m){
 async function handleInbound(message){
  const phone=safePhone(message?.from),messageId=String(message?.id||"");
  if(!phone||!messageId||messageId.length>255)return;
- const incoming={text:msgText(message),type:message.type};
+ const type=message?.type,raw=type==="image"?message.image:type==="video"?message.video:null;
+ const media=message?.media||(raw?{provider:"meta",type,id:String(raw.id||""),mimeType:String(raw.mime_type||"")}:null);
+ const incoming={text:msgText(message),type,media};
  const db=await pool.connect();
  let duplicate=false;
  try{
@@ -147,7 +149,7 @@ async function processYCloudEvents(){
    }
    if(event.kind==="manual_reply"){await handleManualReply(event.phone);}
    else if(event.kind==="incoming"){
-    await handleInbound({from:event.phone,id:"ycloud-"+event.messageId,type:event.messageType,text:{body:event.text||""}});
+    await handleInbound({from:event.phone,id:"ycloud-"+event.messageId,type:event.messageType,text:{body:event.text||""},media:event.media||null});
    }
    await pool.query("UPDATE wa_provider_events SET processed_at=now(),lease_until=NULL,last_error=NULL WHERE event_id=$1",[claim.rows[0].event_id]);
   }catch(err){

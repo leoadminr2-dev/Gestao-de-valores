@@ -24,7 +24,16 @@ export function relevantYCloudEvent(event,businessNumber) {
   if(customer.length<10||customer.length>15||customer===sender)return null;
   if(!["text","image","video","interactive","button"].includes(msg.type))return null;
   const text=msg.type==="text"?String(msg.text?.body||""):"";
-  return {id:event.id,kind:"incoming",phone:customer,messageId:String(msg.id||event.id).slice(0,240),messageType:msg.type,text:text.slice(0,1000)};
+  let media;
+  if(msg.type==="image"||msg.type==="video"){
+   const m=msg[msg.type]||{},link=String(m.link||""),id=String(m.id||"");
+   try{
+    const u=new URL(link);
+    if(link.length<=4096&&u.protocol==="https:"&&u.hostname==="api.ycloud.com"&&/^\/v2\/whatsapp\/media\/download\/[A-Za-z0-9_-]+$/.test(u.pathname)&&/^[A-Za-z0-9_-]{1,160}$/.test(id))
+      media={provider:"ycloud",type:msg.type,id,link,mimeType:String(m.mime_type||"").slice(0,80)};
+   }catch{}
+  }
+  return {id:event.id,kind:"incoming",phone:customer,messageId:String(msg.id||event.id).slice(0,240),messageType:msg.type,text:text.slice(0,1000),...(media?{media}:{})};
  }
  if(type==="whatsapp.smb.message.echoes"){
   const msg=event.whatsappMessage||{};
