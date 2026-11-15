@@ -2,7 +2,7 @@ import http from "node:http";
 import crypto from "node:crypto";
 import pg from "pg";
 import {advance,closingMessage} from "./bot.mjs";
-import {shouldHandleMessage,isProtectedPhone} from "./selective.mjs";
+import {shouldHandleMessage,isProtectedPhone,shouldPauseForManualReply} from "./selective.mjs";
 import {appReplyPhones} from "./coexistence.mjs";
 import {verifyYCloudSignature,relevantYCloudEvent} from "./ycloud.mjs";
 import {createDashboard} from "./dashboard.mjs";
@@ -61,6 +61,9 @@ async function handleInbound(message){
  const type=message?.type,raw=type==="image"?message.image:type==="video"?message.video:null;
  const media=message?.media||(raw?{provider:"meta",type,id:String(raw.id||""),mimeType:String(raw.mime_type||"")}:null);
  const incoming={text:msgText(message),type,media};
+ // Do not create a database row for a personal message without service intent.
+ const existing=await pool.query("SELECT stage,mode,data,last_message_at FROM wa_sessions WHERE phone=$1",[phone]);
+ if(!shouldHandleMessage({phone,messageType:incoming.type,text:incoming.text,session:existing.rows[0]||null,protectedPhones:WHATSAPP_PRIVATE_PHONES}))return;
  const db=await pool.connect();
  let duplicate=false;
  try{
@@ -74,7 +77,8 @@ async function handleInbound(message){
    await db.query("COMMIT");
    return; // Conversa privada: não gerar resposta, pedido ou conteúdo na fila.
   }
-  const move=advance({stage:current.stage,mode:current.mode,data:{...current.data,commercialActivated:true}},incoming);
+  const legacyPrivate=current.mode==="human"&&current.data?.commercialActivated!==true;
+  const move=advance({stage:legacyPrivate?"menu":current.stage,mode:legacyPrivate?"bot":current.mode,data:{...(legacyPrivate?{}:current.data),commercialActivated:true}},incoming);
   if(move.mode==="bot"&&!/^(cancelar|desistir|cancela)$/.test(String(incoming.text||"").trim().toLowerCase())){
    move.data={...move.data,commercialActivated:true};
   }
@@ -108,8 +112,11 @@ async function handleManualReply(phone){
  const db=await pool.connect();
  try{
   await db.query("BEGIN");
-  await db.query("INSERT INTO wa_sessions (phone,mode) VALUES($1,'human') ON CONFLICT (phone) DO UPDATE SET mode='human',updated_at=now()",[phone]);
-  await db.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE phone=$1 AND sent_at IS NULL AND cancelled_at IS NULL",[phone]);
+  const existing=await db.query("SELECT mode,data,last_message_at FROM wa_sessions WHERE phone=$1 FOR UPDATE",[phone]);
+  if(shouldPauseForManualReply(existing.rows[0])){
+   await db.query("UPDATE wa_sessions SET mode='human',updated_at=now() WHERE phone=$1",[phone]);
+   await db.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE phone=$1 AND sent_at IS NULL AND cancelled_at IS NULL",[phone]);
+  }
   await db.query("COMMIT");
  }catch(error){
   try{await db.query("ROLLBACK")}catch{}
@@ -122,6 +129,9 @@ async function receiveYCloudEvent(event){
   const previous=await pool.query("SELECT stage,mode,data,last_message_at FROM wa_sessions WHERE phone=$1",[event.phone]);
   const controlledTest=YCLOUD_TEST_MODE&&event.messageType==="text"&&String(event.text||"").trim().toUpperCase()==="TESTE LMR";
   if(!controlledTest&&!shouldHandleMessage({phone:event.phone,messageType:event.messageType,text:event.text,session:previous.rows[0]||null,protectedPhones:WHATSAPP_PRIVATE_PHONES}))return false;
+ }else if(event.kind==="manual_reply"){
+  const previous=await pool.query("SELECT mode,data,last_message_at FROM wa_sessions WHERE phone=$1",[event.phone]);
+  if(!shouldPauseForManualReply(previous.rows[0]))return false;
  }
  if(isProtectedPhone(event.phone,WHATSAPP_PRIVATE_PHONES))return false;
  const saved=await pool.query("INSERT INTO wa_provider_events(event_id,event_type,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING event_id",[event.id,event.kind,JSON.stringify(event)]);
@@ -339,7 +349,7 @@ const server=http.createServer(async(req,res)=>{
   return json(res,err?.status===413?413:500,{error:err?.status===413?"payload_too_large":"temporary_error"});
  }
 });
-server.listen(PORT,"0.0.0.0",()=>console.log("Refrigeracao WhatsApp webhook initialized on port "+PORT+"; "+(metaReady?"META_CONFIGURED":"AWAITING_META")));
+server.listen(PORT,"0.0.0.0",()=>{console.log("Refrigeracao WhatsApp webhook initialized on port "+PORT+"; "+(metaReady?"META_CONFIGURED":"AWAITING_META"));console.log("YCloud readiness: secret="+Boolean(YCLOUD_WEBHOOK_SECRET)+" apiKey="+Boolean(YCLOUD_API_KEY)+" sender="+Boolean(YCLOUD_SENDER_NUMBER)+" autoReply="+YCLOUD_AUTOREPLY_ENABLED+" testMode="+YCLOUD_TEST_MODE+" privateFilter="+Boolean(WHATSAPP_PRIVATE_PHONES));});
 // Conservar cotas gratuitas: sem sondagens ao banco antes do vínculo oficial Meta.
 // Durante operação, a fila é acionada a cada mensagem recebida e sondada a cada 10 min.
 if(metaReady||ycloudReady){
