@@ -71,3 +71,53 @@ test("painel serves login page, blocks anonymous access and accepts authorized s
   assert.equal(newLogin.status,200);
  }finally{await new Promise(resolve=>server.close(resolve));}
 });
+
+
+test("galeria de vídeo é privada, valida o link e suporta reprodução por intervalo",async()=>{
+ process.env.YCLOUD_API_KEY="only-local-unit-test-key";
+ const videoLink="https://api.ycloud.com/v2/whatsapp/media/download/919306472440541?sig=test&payload=fake";
+ const record={payload:{mediaItems:[{provider:"ycloud",type:"video",id:"919306472440541",link:videoLink,mimeType:"video/mp4"}]}};
+ const credential={salt,password_hash:process.env.LMR_ADMIN_HASH,auth_version:"gallery-v1"};
+ let mediaCalls=0;
+ const pool={query:async(sql)=>{
+  if(sql.includes("SELECT salt,password_hash,auth_version"))return {rows:[credential],rowCount:1};
+  if(sql.includes("SELECT auth_version FROM ops_admin_credentials"))return {rows:[{auth_version:credential.auth_version}],rowCount:1};
+  if(sql.includes("SELECT payload FROM wa_orders WHERE protocol"))return {rows:[record],rowCount:1};
+  throw Error("Unexpected query "+sql);
+ }};
+ const route=createDashboard(pool,{mediaFetch:async(link,options)=>{
+  mediaCalls++;
+  assert.equal(link.origin,"https://api.ycloud.com");
+  assert.equal(options.headers["X-API-Key"],"only-local-unit-test-key");
+  return new Response(Buffer.from("0123456789"),{status:200,headers:{"content-length":"10"}});
+ }});
+ const server=http.createServer(async(req,res)=>{
+  try{
+   if(!await route(req,res,new URL(req.url,"http://localhost"))){res.writeHead(404);res.end();}
+  }catch(e){res.writeHead(500);res.end(String(e));}
+ });
+ await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+ const origin="http://127.0.0.1:"+server.address().port;
+ const url="/painel/api/media/WA-20261114-12345678/0";
+ try{
+  const unauth=await fetch(origin+url);
+  assert.equal(unauth.status,401);
+  assert.equal(mediaCalls,0);
+  const login=await fetch(origin+"/painel/api/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({password})});
+  assert.equal(login.status,200);
+  const cookie=login.headers.get("set-cookie").split(";")[0];
+  const video=await fetch(origin+url,{headers:{cookie,range:"bytes=2-5"}});
+  assert.equal(video.status,206);
+  assert.equal(video.headers.get("content-range"),"bytes 2-5/10");
+  assert.equal(await video.text(),"2345");
+  const invalid=await fetch(origin+url,{headers:{cookie,range:"bytes=20-25"}});
+  assert.equal(invalid.status,416);
+  record.payload.mediaItems[0].link="https://example.org/secret-video.mp4";
+  const forbidden=await fetch(origin+url,{headers:{cookie}});
+  assert.equal(forbidden.status,404);
+  assert.equal(mediaCalls,2);
+ }finally{
+  await new Promise(resolve=>server.close(resolve));
+  delete process.env.YCLOUD_API_KEY;
+ }
+});
