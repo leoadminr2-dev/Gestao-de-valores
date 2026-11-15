@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isCommercialIntent, isProtectedPhone, shouldHandleMessage, shouldPauseForManualReply } from "./selective.mjs";
+import { isCommercialIntent, isProtectedPhone, shouldHandleMessage, shouldPauseForManualReply, isExplicitCommercialRequest } from "./selective.mjs";
 
 for (const word of [
   "refrigeração", "Geladeira", "freezer", "ar-condicionado",
@@ -94,4 +94,15 @@ test("contato pessoal marcado human anteriormente aceita um novo pedido comercia
   assert.equal(shouldHandleMessage({phone:"5521988887777",text:"Oi",session:legacy,now}),false);
   assert.equal(shouldHandleMessage({phone:"5521988887777",text:"Quero vender minha geladeira",session:legacy,now}),true);
   assert.equal(shouldHandleMessage({phone:"5521988887777",text:"MENU",session:legacy,now}),false);
+});
+
+test("conversa pessoal antiga não aciona com palavras comerciais isoladas",()=>{
+ assert.equal(isExplicitCommercialRequest("Geladeira?"),false);
+ assert.equal(isExplicitCommercialRequest("Minha geladeira não gela"),false);
+ assert.equal(isExplicitCommercialRequest("Vou vender a geladeira para meu primo"),false);
+ assert.equal(isExplicitCommercialRequest("Quero vender minha geladeira"),true);
+ assert.equal(isExplicitCommercialRequest("Quanto custa consertar meu freezer?"),true);
+ const privateSession={mode:"human",stage:"menu",data:{},last_message_at:commercialSession.last_message_at};
+ assert.equal(shouldHandleMessage({phone:"5521988887777",text:"Minha geladeira não gela",session:privateSession,now}),false);
+ assert.equal(shouldHandleMessage({phone:"5521988887777",text:"Quero vender minha geladeira",session:privateSession,now}),true);
 });
