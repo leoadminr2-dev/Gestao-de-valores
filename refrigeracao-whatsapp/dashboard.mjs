@@ -79,6 +79,7 @@ function cleanAmount(value){
 export function dashboardConfigured(){return active;}
 export function createDashboard(pool,replyOptions={}){
  const replies=createCustomerReplyService(pool,replyOptions);
+ const mediaFetch=typeof replyOptions.mediaFetch==="function"?replyOptions.mediaFetch:fetch;
  return async function dashboard(req,res,url){
   if(url.pathname!=="/painel"&&!url.pathname.startsWith("/painel/"))return false;
   security(res);
@@ -163,14 +164,30 @@ export function createDashboard(pool,replyOptions={}){
     answer(res,415,{error:"formato_nao_suportado"});return true;
    }
    try{
-    const response=await fetch(link,{headers:{"X-API-Key":process.env.YCLOUD_API_KEY},redirect:"error",signal:AbortSignal.timeout(30000)});
+    const response=await mediaFetch(link,{headers:{"X-API-Key":process.env.YCLOUD_API_KEY},redirect:"error",signal:AbortSignal.timeout(30000)});
     if(!response.ok){answer(res,[401,404].includes(response.status)?410:502,{error:"arquivo_indisponivel_conferir_whatsapp"});return true;}
     const max=20*1024*1024;
     if(Number(response.headers.get("content-length")||0)>max){answer(res,413,{error:"arquivo_muito_grande"});return true;}
     let bytes=0;const chunks=[];
     for await(const c of response.body){bytes+=c.length;if(bytes>max){answer(res,413,{error:"arquivo_muito_grande"});return true;}chunks.push(Buffer.from(c));}
-    res.writeHead(200,{"content-type":mime,"content-disposition":"inline","cache-control":"private, no-store","x-content-type-options":"nosniff"});
-    res.end(Buffer.concat(chunks));return true;
+    const buffer=Buffer.concat(chunks);
+    const common={"content-type":mime,"content-disposition":"inline","cache-control":"private, no-store","x-content-type-options":"nosniff","accept-ranges":"bytes"};
+    const range=String(req.headers.range||"");
+    if(item.type==="video"&&range){
+     const match=range.match(/^bytes=(\d*)-(\d*)$/);
+     let start,end;
+     if(match&&(match[1]||match[2])){
+      if(match[1]){start=Number(match[1]);end=match[2]?Number(match[2]):buffer.length-1;}
+      else{const suffix=Number(match[2]);start=Math.max(0,buffer.length-suffix);end=buffer.length-1;}
+     }
+     if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start>=buffer.length||start<0||end<start||end>=buffer.length){
+      res.writeHead(416,{...common,"content-range":"bytes */"+buffer.length});res.end();return true;
+     }
+     res.writeHead(206,{...common,"content-range":"bytes "+start+"-"+end+"/"+buffer.length,"content-length":end-start+1});
+     res.end(buffer.subarray(start,end+1));return true;
+    }
+    res.writeHead(200,{...common,"content-length":buffer.length});
+    res.end(buffer);return true;
    }catch{answer(res,502,{error:"falha_ao_carregar_midia"});return true;}
   }
   if(url.pathname==="/painel/api/overview"&&req.method==="GET"){
