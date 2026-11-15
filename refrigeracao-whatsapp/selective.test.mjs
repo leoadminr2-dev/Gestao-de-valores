@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isCommercialIntent, isProtectedPhone, shouldHandleMessage } from "./selective.mjs";
+import { isCommercialIntent, isProtectedPhone, shouldHandleMessage, shouldPauseForManualReply } from "./selective.mjs";
 
 for (const word of [
   "refrigeração", "Geladeira", "freezer", "ar-condicionado",
@@ -79,4 +79,19 @@ test("atendimento humano bloqueia o bot; MENU retoma só conversa comercial", ()
     phone:"5521988887777",text:"MENU",
     session:{...human,data:{}},now
   }),false);
+});
+
+test("mensagem manual pessoal não aciona o robô", () => {
+  assert.equal(shouldPauseForManualReply(null,now),false);
+  assert.equal(shouldPauseForManualReply({mode:"human",data:{},last_message_at:commercialSession.last_message_at},now),false);
+  assert.equal(shouldPauseForManualReply({mode:"bot",data:{},last_message_at:commercialSession.last_message_at},now),false);
+  assert.equal(shouldPauseForManualReply(commercialSession,now),true);
+  assert.equal(shouldPauseForManualReply({...commercialSession,last_message_at:"2026-11-02T15:30:00.000Z"},now),false);
+  assert.equal(shouldPauseForManualReply({...commercialSession,mode:"human"},now),false);
+});
+test("contato pessoal marcado human anteriormente aceita um novo pedido comercial", () => {
+  const legacy={mode:"human",stage:"menu",data:{},last_message_at:commercialSession.last_message_at};
+  assert.equal(shouldHandleMessage({phone:"5521988887777",text:"Oi",session:legacy,now}),false);
+  assert.equal(shouldHandleMessage({phone:"5521988887777",text:"Quero vender minha geladeira",session:legacy,now}),true);
+  assert.equal(shouldHandleMessage({phone:"5521988887777",text:"MENU",session:legacy,now}),false);
 });
