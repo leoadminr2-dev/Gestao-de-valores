@@ -50,6 +50,13 @@ export function isProtectedPhone(phone, csv = "") {
     .includes(target);
 }
 
+// App echoes affect only recent commercial bot conversations, never private chats.
+export function shouldPauseForManualReply(session, now = Date.now()) {
+  const last = Date.parse(session?.last_message_at || "");
+  return session?.mode === "bot" && session?.data?.commercialActivated === true &&
+    Number.isFinite(last) && now >= last && now - last <= 24 * 60 * 60 * 1000;
+}
+
 export function shouldHandleMessage({
   phone, messageType = "text", text = "", session = null,
   protectedPhones = "", now = Date.now()
@@ -63,6 +70,9 @@ export function shouldHandleMessage({
   // Depois da transferência para Leonardo, só o comando de retomada
   // numa conversa comercial previamente ativa permite reabrir o robô.
   if (session?.mode === "human") {
+    // Recover past personal contacts incorrectly tagged as human by app echoes.
+    if (session?.data?.commercialActivated !== true)
+      return messageType === "text" && isCommercialIntent(text);
     return recentlyActive && /^(menu|inicio|reiniciar|0)$/.test(normalizeText(text));
   }
   if (recentlyActive) return true;
