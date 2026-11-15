@@ -51,6 +51,12 @@ export function isProtectedPhone(phone, csv = "") {
 }
 
 // App echoes affect only recent commercial bot conversations, never private chats.
+export function isExplicitCommercialRequest(text) {
+  const value=normalizeText(text);
+  return isCommercialIntent(value) &&
+    /\b(quero|queria|gostaria|preciso|solicito|orcamento|agendar|marcar|contratar)\b|quanto (?:custa|fica|cobra)|qual (?:valor|preco)/.test(value);
+}
+
 export function shouldPauseForManualReply(session, now = Date.now()) {
   const last = Date.parse(session?.last_message_at || "");
   return session?.mode === "bot" && session?.data?.commercialActivated === true &&
@@ -72,7 +78,7 @@ export function shouldHandleMessage({
   if (session?.mode === "human") {
     // Recover past personal contacts incorrectly tagged as human by app echoes.
     if (session?.data?.commercialActivated !== true)
-      return messageType === "text" && isCommercialIntent(text);
+      return messageType === "text" && isExplicitCommercialRequest(text);
     return recentlyActive && /^(menu|inicio|reiniciar|0)$/.test(normalizeText(text));
   }
   if (recentlyActive) return true;
