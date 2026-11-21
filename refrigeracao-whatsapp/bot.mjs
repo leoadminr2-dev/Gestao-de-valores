@@ -152,6 +152,9 @@ function review(data) {
 }
 const welcome = "Olá! 👋 Você está no atendimento automático da Leonardo Moreira Refrigeração.";
 const nameQuestion = "Como posso chamar você?";
+const neighborhoodQuestion = "Em qual bairro será o atendimento?";
+const streetNumber = /\b\d+[a-z]?\b|s\s*\/\s*n|sem n[uú]mero/i;
+const streetPrefix = /^(rua|r\.|avenida|av\.|estrada|travessa|praca|alameda|rodovia)\s/i;
 const addressQuestion = "Qual é o endereço do serviço? Envie a rua, o número (ou s/n), o bairro e a cidade. Pode mandar em mensagens separadas.";
 const serviceQuestion = "O que você precisa fazer e em qual aparelho?";
 const timing = /^(hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo|de manha|manha|tarde|noite|a combinar|sem preferencia|\d{1,2}\/\d{1,2})\b/;
@@ -188,22 +191,42 @@ function guidedStep(stage,data,raw,t) {
     }
     if (!/^[\p{L}][\p{L}'’ -]{1,79}$/u.test(raw)) return next(stage,nameQuestion);
     data.cliente=raw;
-    return next("endereco",addressQuestion);
+    return next("bairro_inicial",neighborhoodQuestion);
   }
-  if (stage==="endereco") {
-    if (t===norm(data.cliente)) return next(stage,addressQuestion);
-    if(timing.test(t)){data.preferencia=raw;return next(stage,addressQuestion);}
-    if(serviceType(t)){data.servico=serviceType(t);data.relato=raw;return next(stage,addressQuestion);}
-    const parts=data.enderecoPartes||[];
-    if(!parts.some(p=>norm(p)===t)) parts.push(raw);
-    data.enderecoPartes=parts.slice(-8);
-    data.endereco=data.enderecoPartes.join(", ");
-    if(!/\b\d+\b|s\s*\/\s*n|sem numero/i.test(data.endereco))
-      return next(stage,"Anotei. Para completar o endereço, envie a rua e o número, incluindo bairro e cidade se ainda faltarem.");
-    const afterNumber=data.endereco.split(/\b\d+[a-z]?\b|s\s*\/\s*n|sem numero/i).at(-1).replace(/^[ ,;–-]+/,"");
-    if(!afterNumber) return next(stage,"Em qual bairro e cidade fica esse endereço?");
-    data.bairro=afterNumber.slice(0,150);
+  if (stage==="bairro_inicial" || stage==="endereco") {
+    if(t===norm(data.cliente))return next(stage,neighborhoodQuestion);
+    if(timing.test(t)){data.preferencia=raw;return next(stage,neighborhoodQuestion);}
+    if(serviceType(t)){data.servico=serviceType(t);data.relato=raw;return next(stage,neighborhoodQuestion);}
+    // Aproveita também endereços enviados espontaneamente ou em sessões anteriores.
+    if(data.enderecoPartes?.length || streetPrefix.test(t) || streetNumber.test(raw)){
+      const parts=data.enderecoPartes||[];
+      if(!parts.some(p=>norm(p)===t))parts.push(raw);
+      data.enderecoPartes=parts;
+      const address=parts.join(", ");
+      const suffix=address.split(streetNumber).at(-1).replace(/^[ ,;–-]+/,"");
+      if(streetNumber.test(address) && suffix){
+        data.endereco=address;data.bairro=suffix;
+      }else if(parts.length>1 && !streetNumber.test(raw) && !streetPrefix.test(t)){
+        data.bairro=raw;
+      }else return next(stage,neighborhoodQuestion);
+    }else data.bairro=raw;
     return next("necessidade",data.servico?"Entendi que você precisa de "+data.servico.toLowerCase()+". "+askEquipment(data):serviceQuestion);
+  }
+  if(stage==="endereco_final" || stage==="ajustar_endereco"){
+    if(timing.test(t)){data.preferencia=[data.preferencia,raw].filter(Boolean).join(" · ");return next(stage,"Anotei sua preferência. Falta completar o endereço.");}
+    if(/^(sim|confirmar|confirmo)$/.test(t))return next(stage,"Envie o endereço para eu mostrar o pedido completo.");
+    const parts=data.enderecoPartes||[];
+    if(!parts.some(part=>norm(part)===t))parts.push(raw);
+    data.enderecoPartes=parts;
+    const address=parts.join(", ");
+    if(!streetNumber.test(address))return next(stage,"Qual é o número do imóvel? Se não houver, escreva s/n.");
+    if(!/[a-z]{2}/i.test(norm(address).replace(streetNumber,"")))return next(stage,"Qual é o nome da rua?");
+    const suffix=address.split(streetNumber).at(-1).replace(/^[ ,;–-]+/,"");
+    if(!suffix && !data.bairro?.includes(","))return next(stage,"Em qual cidade fica esse endereço?");
+    if(stage==="ajustar_endereco" && suffix)data.bairro=suffix;
+    const includeBairro=data.bairro && !norm(address).includes(norm(data.bairro));
+    data.endereco=includeBairro?address+" · Bairro: "+data.bairro:address;
+    return next("revisao_guiada",guidedReview(data));
   }
   if(stage==="necessidade"){
     const history=[data.relato,raw].filter(Boolean).join(" ").slice(-800);
@@ -236,6 +259,9 @@ function guidedStep(stage,data,raw,t) {
   if(stage==="aceite_orcamento"){
     if(/^(sim|aceito|quero|pode seguir|quero seguir|vamos seguir)[.! ]*$/.test(t)){
       data.interesseOrcamento=data.avaliacaoPendente?"Solicitou avaliação":"Quer seguir com o orçamento apresentado";
+      if(!data.endereco){
+        return next("endereco_final","Para completar o pedido, envie a rua, o número (ou s/n) e a cidade. Pode mandar em mensagens separadas."+(data.bairro?" Já anotei o bairro: "+data.bairro+".":""));
+      }
       return next("revisao_guiada",guidedReview(data));
     }
     if(/^(nao|agora nao|nao quero|nao obrigado|nao obrigada)[.! ]*$/.test(t))
@@ -262,10 +288,7 @@ function guidedStep(stage,data,raw,t) {
     if(t==="preferencia")return next("ajustar_preferencia","Qual dia ou período você prefere?");
     return next(stage,"Qual campo deseja alterar: nome, endereço, serviço ou preferência?");
   }
-  if(stage==="ajustar_endereco"){
-    const move=guidedStep("endereco",data,raw,t);
-    if(move.stage==="endereco")return {...move,stage};
-  }else if(stage==="ajustar_nome"){data.cliente=raw;}
+  if(stage==="ajustar_nome"){data.cliente=raw;}
   else if(stage==="ajustar_preferencia"){data.preferencia=raw;}
   return next("revisao_guiada",guidedReview(data));
 }
@@ -276,7 +299,7 @@ export function advance(session, incoming) {
   const raw=String(incoming?.text||"").trim().slice(0,1000),t=norm(raw);
   if(/^(menu|inicio|reiniciar|0)$/.test(t))return {stage:"menu",mode:"bot",data:{},reply:MENU};
   if(mode==="human" || data.handoffPending === true)return {stage,mode,data,reply:null};
-  if(/^(5|9|humano|atendente|responsavel|falar com leonardo|falar com responsavel|pessoa de verdade)$/.test(t))
+  if((!["endereco_final","ajustar_endereco","bairro_inicial","endereco"].includes(stage) && /^(5|9)$/.test(t)) || /^(humano|atendente|responsavel|falar com leonardo|falar com responsavel|pessoa de verdade)$/.test(t))
     return human(stage,data);
   if(/^(cancelar|desistir|cancela)$/.test(t))
     return {stage:"menu",mode:"bot",data:{},reply:"Tudo bem, sem problema. Não registrei nenhum novo pedido.\n\n"+MENU};

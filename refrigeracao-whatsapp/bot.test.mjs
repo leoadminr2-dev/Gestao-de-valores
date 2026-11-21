@@ -261,7 +261,7 @@ test("instalação citada depois de comprar, endereço fragmentado e horário co
  const send=text=>r=advance(r,{text});
  send("Tô pra comprar meu ar condicionado");assert.match(r.reply,/automático/);
  send("Queria fazer um orçamento de instalação contigo");send("Maria");
- send("Maria");assert.equal(r.stage,"endereco");
+ send("Maria");assert.equal(r.stage,"bairro_inicial");
  send("Rua Exemplo");send("12");send("Tanque, Rio de Janeiro");
  send("Split, 9000 BTUs");assert.match(r.reply,/650,00/);
  send("SIM");send("Hoje");send("Manhã");assert.match(r.reply,/Hoje · Manhã/);
@@ -289,7 +289,8 @@ test("serviço sem preço pede avaliação antes da conferência",()=>{
  const input={stage:"necessidade",mode:"bot",data:{guided:true,servico:"Instalação de ar-condicionado"}};
  const offer=advance(input,{text:"Ar de janela"});
  assert.match(offer.reply,/solicitação de avaliação/);
- const review=advance(offer,{text:"Sim"});
+ const address=advance(offer,{text:"Sim"});assert.equal(address.stage,"endereco_final");
+ const review=advance(address,{text:"Rua B, 18, Penha, Rio"});
  assert.equal(review.stage,"revisao_guiada");assert.equal(review.order,undefined);
  assert.equal(advance(review,{text:"CONFIRMAR"}).order.interesseOrcamento,"Solicitou avaliação");
 });
@@ -302,4 +303,18 @@ test("orçamento genérico esclarece assunto antes de pedir nome e endereço",()
  const clear=advance(hello,{text:"Preciso instalar um split"});
  assert.equal(clear.stage,"nome");assert.match(clear.data.servico,/Instalação/);
  assert.equal(advance(empty,{text:"Quanto custa instalar um split?"}).stage,"nome");
+});
+
+test("orçamento com bairro; rua e número somente depois do aceite",()=>{
+ let r=empty;
+ const send=text=>r=advance(r,{text});
+ send("Quero limpar meu ar de janela");send("Ana");
+ assert.match(r.reply,/bairro/);assert.doesNotMatch(r.reply,/rua|número/);
+ send("Tanque");send("Um aparelho");assert.match(r.reply,/250,00/);
+ assert.equal(r.data.endereco,undefined);
+ assert.equal(advance(r,{text:"Não"}).stage,"encerrado");
+ send("SIM");assert.equal(r.stage,"endereco_final");assert.equal(r.order,undefined);
+ send("Rua Exemplo");send("5");send("Rio de Janeiro");assert.equal(r.stage,"revisao_guiada");
+ assert.match(r.reply,/Tanque/);send("CONFIRMAR");assert.equal(r.order.bairro,"Tanque");
+ assert.match(r.order.endereco,/Rua Exemplo, 5, Rio de Janeiro/);
 });
