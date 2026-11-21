@@ -1,3 +1,4 @@
+import {isCommercialIntent} from "./selective.mjs";
 // Atendimento empático e guiado da Leonardo Moreira Refrigeração.
 // O bot nunca confirma preço final, visita, contrato ou compra sem avaliação do responsável.
 export const PLATFORM_URL = "https://headless-qqhigtkprnz-leoadminr2-140a.wix-site-host.com/";
@@ -164,21 +165,21 @@ function serviceType(text) {
 function quote(data) {
   const detail=norm(data.equipamento);
   if (data.servico.startsWith("Manutenção"))
-    return "Visita técnica — R$ 120,00. Inclui avaliação do aparelho e identificação do defeito. O valor da visita é abatido se você aprovar o conserto. Peças e mão de obra do reparo serão orçadas após o diagnóstico.";
+    return "*Visita técnica*\n*Valor · R$ 120,00*\nInclui avaliação do aparelho e identificação do defeito. O valor da visita é abatido se você aprovar o conserto. Peças e mão de obra do reparo serão orçadas após o diagnóstico.";
   if (data.servico.startsWith("Instalação") && /split/.test(detail))
-    return "Instalação padrão de split — referência de R$ 650,00 de mão de obra por aparelho. Inclui fixação das unidades, interligação, vácuo e teste de funcionamento. Materiais, adequação elétrica e condições de acesso serão avaliados antes do valor final.";
+    return "❄️ *Instalação padrão de split*\n*Mão de obra estimada · R$ 650,00 por aparelho*\nInclui fixação das unidades, interligação, vácuo e teste de funcionamento. Materiais, adequação elétrica e condições de acesso serão avaliados antes do valor final.";
   if (data.servico.startsWith("Limpeza") && /janela|split/.test(detail)) {
     const unit=/janela/.test(detail)?"R$ 250,00":/\b9\s*(mil|k|[., ]?000)\b/.test(detail)?"R$ 280,00":"";
-    if (unit) return "Higienização — "+unit+" por aparelho. Inclui limpeza dos filtros, serpentina e bandeja, remontagem e teste de funcionamento.";
+    if (unit) return "❄️ *Higienização de ar-condicionado*\n*Valor · "+unit+" por aparelho*\nInclui limpeza dos filtros, serpentina e bandeja, remontagem e teste de funcionamento.";
   }
-  return "Leonardo vai avaliar os detalhes e enviar o orçamento discriminado, com mão de obra, materiais e total para sua aprovação.";
+  return null;
 }
 function guidedReview(data) {
-  return ["Confira os dados do pedido:",data.cliente,data.endereco,"Serviço: "+data.servico,"Detalhes: "+data.equipamento,"Preferência: "+(data.preferencia||"A combinar"),"Orçamento: "+data.orcamento,"Responda SIM para confirmar os dados e registrar o pedido, ou CORRIGIR para ajustar. Leonardo confirmará a disponibilidade do horário."].join("\n");
+  return ["Confira os dados do pedido:",data.cliente,data.endereco,"Serviço: "+data.servico,"Detalhes: "+data.equipamento,"Preferência: "+(data.preferencia||"A combinar"),"Responda CONFIRMAR para confirmar os dados e registrar o pedido, ou CORRIGIR para ajustar. Leonardo confirmará a disponibilidade do horário."].join("\n");
 }
 function guidedStep(stage,data,raw,t) {
   const next=(stage,reply)=>({stage,mode:"bot",data,reply});
-  if (ack.test(t)) return next(stage,null);
+  if (ack.test(t)) return next(stage,stage==="aceite_orcamento"?"Quer seguir? Responda SIM ou NÃO.":null);
   if (stage==="nome") {
     if (serviceType(t) || /comprar|ar.condicionado|orcamento/.test(t)) {
       data.relato=[data.relato,raw].filter(Boolean).join(" ").slice(-700);
@@ -223,8 +224,27 @@ function guidedStep(stage,data,raw,t) {
       return next(stage,"O que acontece quando você liga o aparelho? Se ainda não souber, pode responder “preciso de avaliação”.");
     }
     data.equipamento=history;
-    data.orcamento=quote(data);
-    return next("revisao_guiada","🧾 *Orçamento do atendimento*\n"+data.orcamento+"\n\n"+guidedReview(data).replace("Orçamento: "+data.orcamento+"\n",""));
+    const estimate=quote(data);
+    data.orcamento=estimate || "Avaliação de Leonardo pendente para definir mão de obra, materiais e valor total.";
+    data.avaliacaoPendente=!estimate;
+    delete data.interesseOrcamento;
+    const message=estimate
+      ? estimate+"\n\nEsse orçamento atende ao que você procura?"
+      : "*Orçamento sob avaliação*\nLeonardo vai conferir os detalhes e informar mão de obra, materiais e total. Quer seguir com a solicitação de avaliação?";
+    return next("aceite_orcamento",message+"\nResponda SIM para seguir, NÃO para encerrar ou envie sua dúvida.");
+  }
+  if(stage==="aceite_orcamento"){
+    if(/^(sim|aceito|quero|pode seguir|quero seguir|vamos seguir)[.! ]*$/.test(t)){
+      data.interesseOrcamento=data.avaliacaoPendente?"Solicitou avaliação":"Quer seguir com o orçamento apresentado";
+      return next("revisao_guiada",guidedReview(data));
+    }
+    if(/^(nao|agora nao|nao quero|nao obrigado|nao obrigada)[.! ]*$/.test(t))
+      return {stage:"encerrado",mode:"bot",data:{},reply:"Tudo bem! Obrigado pelo contato. Se precisar, estamos por aqui."};
+    if(timing.test(t)){
+      data.preferencia=[data.preferencia,raw].filter(Boolean).join(" · ").slice(-150);
+      return next(stage,"Anotei sua preferência: "+data.preferencia+". Quer seguir? Responda SIM ou NÃO.");
+    }
+    return {stage,mode:"human",data:{...data,duvidaOrcamento:raw},reply:"Vou deixar sua dúvida com Leonardo. Ele dará continuidade por aqui."};
   }
   if(stage==="revisao_guiada"){
     if(/^(sim|confirmo|confirmar)$/.test(t))return {stage:"encerrado",mode:"bot",data:{},reply:null,order:{...data}};
@@ -233,7 +253,7 @@ function guidedStep(stage,data,raw,t) {
       return next(stage,guidedReview(data));
     }
     if(t==="corrigir")return next("campo_correcao","Qual dado quer corrigir? Escreva nome, endereço, serviço ou preferência.");
-    return next(stage,"Para ajustar, escreva CORRIGIR. Para registrar os dados acima, responda SIM.");
+    return next(stage,"Para ajustar, escreva CORRIGIR. Para registrar os dados acima, responda CONFIRMAR.");
   }
   if(stage==="campo_correcao"){
     if(t==="nome")return next("ajustar_nome",nameQuestion);
@@ -311,6 +331,18 @@ export function advance(session, incoming) {
   }
   if(/(plataforma|acessar o site|acessar plataforma|link do site|formulario online|agendar online)/.test(t))
     return {stage,mode,data,reply:"🌐 Claro! Você pode acessar nossa plataforma por aqui:\n"+PLATFORM_URL+"\n\nLá é possível enviar uma solicitação de atendimento e obter um protocolo. Se preferir, podemos continuar pelo WhatsApp. A visita depende de confirmação."};
+  const statedTopic=Boolean(serviceType(t)) || /refrigeracao|ar[ -]condicionado|geladeira|freezer|lavadora|maquina de lavar|split|ar de janela/.test(t);
+  if(stage==="outro_assunto"){
+    if(!isCommercialIntent(raw))return {stage,mode,data,reply:null};
+    stage="menu";
+  }
+  if(stage==="assunto"){
+    if(/^(nao\b|outro\b|pessoal\b)/.test(t))
+      return {stage:"outro_assunto",mode,data:{},reply:"Tudo bem! Vou deixar a conversa para o Leonardo."};
+    if(/^(sim|isso|e sim)[.! ]*$/.test(t) || statedTopic)
+      return {stage:"nome",mode,data:{...data,guided:true,relato:statedTopic?raw:"",servico:serviceType(t)},reply:nameQuestion};
+    return {stage,mode,data,reply:"Seu contato é sobre refrigeração? Pode responder SIM, OUTRO ASSUNTO ou contar o que precisa."};
+  }
   if(stage==="encerrado"){
     if(ack.test(t)||t==="sim")return {stage,mode,data,reply:null};
     stage="menu";
@@ -318,6 +350,7 @@ export function advance(session, incoming) {
   if(data.guided)return guidedStep(stage,data,raw,t);
   if(stage==="menu" && !/^\d+$/.test(t) && !/contrato|empresa|residencial|protocolo|acompanhar|quero vender|quero comprar|agendar online/.test(t)){
     if(ack.test(t))return {stage,mode,data,reply:null};
+    if(!statedTopic)return {stage:"assunto",mode,data,reply:welcome+" Seu contato é sobre refrigeração? Pode me contar o que precisa ou responder OUTRO ASSUNTO."};
     return {stage:"nome",mode,data:{...data,guided:true,relato:serviceType(t)||/comprar|ar.condicionado|split/.test(t)?raw:"",servico:serviceType(t)},reply:welcome+" "+nameQuestion};
   }
   if(/preco|valor|quanto custa|quanto fica|orcamento|quanto cobram/.test(t))

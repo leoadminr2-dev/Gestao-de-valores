@@ -8,7 +8,8 @@ test("solicitação exige consentimento",()=>{
  let r=advance(empty,{text:"1"});assert.equal(r.stage,"ar_escolha");
  r=advance(r,{text:"1"});assert.equal(r.stage,"nome");
  r=advance(r,{text:"Ana Souza"});r=advance(r,{text:"Rua Exemplo, 10, Irajá, Rio"});r=advance(r,{text:"Split LG 9000"});
- assert.equal(r.stage,"revisao_guiada");assert.equal(r.order,undefined);
+ assert.equal(r.stage,"aceite_orcamento");assert.doesNotMatch(r.reply,/Ana Souza|Rua Exemplo/);
+ r=advance(r,{text:"SIM"});assert.equal(r.stage,"revisao_guiada");assert.equal(r.order,undefined);assert.doesNotMatch(r.reply,/650,00/);
  r=advance(r,{text:"SIM"});assert.equal(r.order.cliente,"Ana Souza");
 });
 test("humano impede respostas até MENU",()=>{let r=advance(empty,{text:"5"});assert.equal(r.mode,"human");r=advance(r,{text:"ajuda"});assert.equal(r.reply,null);r=advance(r,{text:"menu"});assert.equal(r.mode,"bot");});
@@ -263,7 +264,7 @@ test("instalação citada depois de comprar, endereço fragmentado e horário co
  send("Maria");assert.equal(r.stage,"endereco");
  send("Rua Exemplo");send("12");send("Tanque, Rio de Janeiro");
  send("Split, 9000 BTUs");assert.match(r.reply,/650,00/);
- send("Hoje");send("Manhã");assert.match(r.reply,/Hoje · Manhã/);
+ send("SIM");send("Hoje");send("Manhã");assert.match(r.reply,/Hoje · Manhã/);
  send("SIM");assert.equal(r.order.bairro,"Tanque, Rio de Janeiro");
  send("Ok");assert.equal(r.reply,null);
 });
@@ -272,7 +273,33 @@ test("limpeza de janela, correção do endereço e confirmação única",()=>{
  const send=text=>r=advance(r,{text});
  send("Quanto custa a lavagem de ar de janela?");send("Ana");send("Rua A, 24, Centro, Rio");
  send("Uma unidade");assert.match(r.reply,/250,00/);
- send("corrigir");send("endereço");send("Rua B, 18, Penha, Rio");
+ send("SIM");send("corrigir");send("endereço");send("Rua B, 18, Penha, Rio");
  assert.match(r.reply,/Rua B/);send("SIM");assert.match(r.order.orcamento,/250,00/);
  send("SIM");assert.equal(r.order,undefined);
+});
+
+test("recusa e dúvida sobre preço não registram pedido",()=>{
+ const session={stage:"aceite_orcamento",mode:"bot",data:{guided:true}};
+ const decline=advance(session,{text:"Não"});
+ assert.equal(decline.stage,"encerrado");assert.equal(decline.order,undefined);
+ const question=advance(session,{text:"Inclui o material?"});
+ assert.equal(question.mode,"human");assert.equal(question.order,undefined);
+});
+test("serviço sem preço pede avaliação antes da conferência",()=>{
+ const input={stage:"necessidade",mode:"bot",data:{guided:true,servico:"Instalação de ar-condicionado"}};
+ const offer=advance(input,{text:"Ar de janela"});
+ assert.match(offer.reply,/solicitação de avaliação/);
+ const review=advance(offer,{text:"Sim"});
+ assert.equal(review.stage,"revisao_guiada");assert.equal(review.order,undefined);
+ assert.equal(advance(review,{text:"CONFIRMAR"}).order.interesseOrcamento,"Solicitou avaliação");
+});
+
+test("orçamento genérico esclarece assunto antes de pedir nome e endereço",()=>{
+ const hello=advance(empty,{text:"Queria um orçamento"});
+ assert.equal(hello.stage,"assunto");assert.match(hello.reply,/sobre refrigeração/);
+ const personal=advance(hello,{text:"Outro assunto"});assert.equal(personal.stage,"outro_assunto");
+ assert.equal(advance(personal,{text:"Bom dia, Léo"}).reply,null);
+ const clear=advance(hello,{text:"Preciso instalar um split"});
+ assert.equal(clear.stage,"nome");assert.match(clear.data.servico,/Instalação/);
+ assert.equal(advance(empty,{text:"Quanto custa instalar um split?"}).stage,"nome");
 });
