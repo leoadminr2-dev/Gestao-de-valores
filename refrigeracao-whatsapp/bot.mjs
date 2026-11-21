@@ -26,7 +26,7 @@ export const MENU = [
   "5️⃣ *Falar com Leonardo Moreira*",
   "Técnico responsável pela manutenção",
   "",
-  "💬 Digite o número ou conte o que precisa."
+  "💬 Atendimento automático. Digite o número ou conte o que precisa."
 ].join("\n");
 
 export const norm = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -47,6 +47,9 @@ function orderFlow(servico, previous={}, extra={}) {
     return {stage:"venda_midia",mode:"bot",data:{
       ...data,fotos:0,videoRecebido:false,mediaItems:[]
     },reply:"♻️ *Vamos avaliar o equipamento que deseja vender!*\n\n📷 Envie pelo menos *1 foto* do equipamento (de preferência mostrando o estado geral).\n🎥 Envie também *1 vídeo curto* mostrando seu funcionamento ou o defeito.\n\nMande os dois aqui nesta conversa, em qualquer ordem. Depois vou pedir seus dados e detalhes do aparelho.\n\nPara voltar ao menu, digite *0*."};
+  }
+  if (serviceType(norm(servico)) && !servico.startsWith("Contrato") && data.tipoAtendimento!=="Empresarial") {
+    return {stage:"nome",mode:"bot",data:{...data,guided:true},reply:welcome+" "+nameQuestion};
   }
   const isCompany=data.tipoAtendimento==="Empresarial";
   const intro=servico.startsWith("Compra") || servico.startsWith("Venda")
@@ -146,6 +149,107 @@ function review(data) {
   ];
   return lines.join("\n");
 }
+const welcome = "Olá! 👋 Você está no atendimento automático da Leonardo Moreira Refrigeração.";
+const nameQuestion = "Como posso chamar você?";
+const addressQuestion = "Qual é o endereço do serviço? Envie a rua, o número (ou s/n), o bairro e a cidade. Pode mandar em mensagens separadas.";
+const serviceQuestion = "O que você precisa fazer e em qual aparelho?";
+const timing = /^(hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo|de manha|manha|tarde|noite|a combinar|sem preferencia|\d{1,2}\/\d{1,2})\b/;
+const ack = /^(ok|obrigad[oa]|valeu|certo|beleza|blz|👍)[.! ]*$/;
+function serviceType(text) {
+  if (/instala[cç]|instalar/.test(text)) return "Instalação de ar-condicionado";
+  if (/limpeza|higieniz|lavagem|lavacao|limpar/.test(text)) return "Limpeza profunda e higienização";
+  if (/manutencao|consert|reparo|defeito|nao (gela|liga|centrifuga)|parou|vazando|pingando|barulho/.test(text)) return "Manutenção e consertos";
+  return "";
+}
+function quote(data) {
+  const detail=norm(data.equipamento);
+  if (data.servico.startsWith("Manutenção"))
+    return "Visita técnica — R$ 120,00. Inclui avaliação do aparelho e identificação do defeito. O valor da visita é abatido se você aprovar o conserto. Peças e mão de obra do reparo serão orçadas após o diagnóstico.";
+  if (data.servico.startsWith("Instalação") && /split/.test(detail))
+    return "Instalação padrão de split — referência de R$ 650,00 de mão de obra por aparelho. Inclui fixação das unidades, interligação, vácuo e teste de funcionamento. Materiais, adequação elétrica e condições de acesso serão avaliados antes do valor final.";
+  if (data.servico.startsWith("Limpeza") && /janela|split/.test(detail)) {
+    const unit=/janela/.test(detail)?"R$ 250,00":/\b9\s*(mil|k|[., ]?000)\b/.test(detail)?"R$ 280,00":"";
+    if (unit) return "Higienização — "+unit+" por aparelho. Inclui limpeza dos filtros, serpentina e bandeja, remontagem e teste de funcionamento.";
+  }
+  return "Leonardo vai avaliar os detalhes e enviar o orçamento discriminado, com mão de obra, materiais e total para sua aprovação.";
+}
+function guidedReview(data) {
+  return ["Confira os dados do pedido:",data.cliente,data.endereco,"Serviço: "+data.servico,"Detalhes: "+data.equipamento,"Preferência: "+(data.preferencia||"A combinar"),"Orçamento: "+data.orcamento,"Responda SIM para confirmar os dados e registrar o pedido, ou CORRIGIR para ajustar. Leonardo confirmará a disponibilidade do horário."].join("\n");
+}
+function guidedStep(stage,data,raw,t) {
+  const next=(stage,reply)=>({stage,mode:"bot",data,reply});
+  if (ack.test(t)) return next(stage,null);
+  if (stage==="nome") {
+    if (serviceType(t) || /comprar|ar.condicionado|orcamento/.test(t)) {
+      data.relato=[data.relato,raw].filter(Boolean).join(" ").slice(-700);
+      data.servico=serviceType(norm(data.relato));
+      return next(stage,nameQuestion);
+    }
+    if (!/^[\p{L}][\p{L}'’ -]{1,79}$/u.test(raw)) return next(stage,nameQuestion);
+    data.cliente=raw;
+    return next("endereco",addressQuestion);
+  }
+  if (stage==="endereco") {
+    if (t===norm(data.cliente)) return next(stage,addressQuestion);
+    if(timing.test(t)){data.preferencia=raw;return next(stage,addressQuestion);}
+    if(serviceType(t)){data.servico=serviceType(t);data.relato=raw;return next(stage,addressQuestion);}
+    const parts=data.enderecoPartes||[];
+    if(!parts.some(p=>norm(p)===t)) parts.push(raw);
+    data.enderecoPartes=parts.slice(-8);
+    data.endereco=data.enderecoPartes.join(", ");
+    if(!/\b\d+\b|s\s*\/\s*n|sem numero/i.test(data.endereco))
+      return next(stage,"Anotei. Para completar o endereço, envie a rua e o número, incluindo bairro e cidade se ainda faltarem.");
+    const afterNumber=data.endereco.split(/\b\d+[a-z]?\b|s\s*\/\s*n|sem numero/i).at(-1).replace(/^[ ,;–-]+/,"");
+    if(!afterNumber) return next(stage,"Em qual bairro e cidade fica esse endereço?");
+    data.bairro=afterNumber.slice(0,150);
+    return next("necessidade",data.servico?"Entendi que você precisa de "+data.servico.toLowerCase()+". "+askEquipment(data):serviceQuestion);
+  }
+  if(stage==="necessidade"){
+    const history=[data.relato,raw].filter(Boolean).join(" ").slice(-800);
+    data.servico=serviceType(t)||data.servico||serviceType(norm(history));
+    if(!data.servico){
+      const special=initialIntent(t,data);
+      if(special && /Venda|Compra|Contrato/.test(special.data.servico||""))return {...special,data:{...special.data,guided:false}};
+      data.relato=history;
+      return next(stage,"Você precisa de instalação, limpeza, conserto, compra ou venda? Pode explicar com suas palavras.");
+    }
+    data.relato=history;
+    if(!/janela|split|geladeira|freezer|lavadora|maquina|ar[ -]condicionado|refrigerador/.test(norm(history)))
+      return next(stage,askEquipment(data));
+    if(!data.servico.startsWith("Manutenção") && !/janela|split/.test(norm(history)))
+      return next(stage,"O ar-condicionado é split ou de janela? Se souber, informe também a capacidade em BTUs.");
+    if(data.servico.startsWith("Manutenção") && !/nao |parou|vaz|barulho|ping|queb|gelando pouco|cheiro|ruido|falh|deslig|esquent|trav|trepid|erro|congel/.test(norm(history)) && !data.perguntouDefeito){
+      data.perguntouDefeito=true;
+      return next(stage,"O que acontece quando você liga o aparelho? Se ainda não souber, pode responder “preciso de avaliação”.");
+    }
+    data.equipamento=history;
+    data.orcamento=quote(data);
+    return next("revisao_guiada","🧾 *Orçamento do atendimento*\n"+data.orcamento+"\n\n"+guidedReview(data).replace("Orçamento: "+data.orcamento+"\n",""));
+  }
+  if(stage==="revisao_guiada"){
+    if(/^(sim|confirmo|confirmar)$/.test(t))return {stage:"encerrado",mode:"bot",data:{},reply:null,order:{...data}};
+    if(timing.test(t)){
+      data.preferencia=[data.preferencia,raw].filter(Boolean).join(" · ").slice(-150);
+      return next(stage,guidedReview(data));
+    }
+    if(t==="corrigir")return next("campo_correcao","Qual dado quer corrigir? Escreva nome, endereço, serviço ou preferência.");
+    return next(stage,"Para ajustar, escreva CORRIGIR. Para registrar os dados acima, responda SIM.");
+  }
+  if(stage==="campo_correcao"){
+    if(t==="nome")return next("ajustar_nome",nameQuestion);
+    if(t==="endereco"){data.enderecoPartes=[];return next("ajustar_endereco",addressQuestion);}
+    if(t==="servico"){data.relato="";data.servico="";return next("necessidade",serviceQuestion);}
+    if(t==="preferencia")return next("ajustar_preferencia","Qual dia ou período você prefere?");
+    return next(stage,"Qual campo deseja alterar: nome, endereço, serviço ou preferência?");
+  }
+  if(stage==="ajustar_endereco"){
+    const move=guidedStep("endereco",data,raw,t);
+    if(move.stage==="endereco")return {...move,stage};
+  }else if(stage==="ajustar_nome"){data.cliente=raw;}
+  else if(stage==="ajustar_preferencia"){data.preferencia=raw;}
+  return next("revisao_guiada",guidedReview(data));
+}
+
 export function advance(session, incoming) {
   let stage=session?.stage||"menu",mode=session?.mode||"bot";
   const data={...(session?.data||{})};
@@ -207,6 +311,15 @@ export function advance(session, incoming) {
   }
   if(/(plataforma|acessar o site|acessar plataforma|link do site|formulario online|agendar online)/.test(t))
     return {stage,mode,data,reply:"🌐 Claro! Você pode acessar nossa plataforma por aqui:\n"+PLATFORM_URL+"\n\nLá é possível enviar uma solicitação de atendimento e obter um protocolo. Se preferir, podemos continuar pelo WhatsApp. A visita depende de confirmação."};
+  if(stage==="encerrado"){
+    if(ack.test(t)||t==="sim")return {stage,mode,data,reply:null};
+    stage="menu";
+  }
+  if(data.guided)return guidedStep(stage,data,raw,t);
+  if(stage==="menu" && !/^\d+$/.test(t) && !/contrato|empresa|residencial|protocolo|acompanhar|quero vender|quero comprar|agendar online/.test(t)){
+    if(ack.test(t))return {stage,mode,data,reply:null};
+    return {stage:"nome",mode,data:{...data,guided:true,relato:serviceType(t)||/comprar|ar.condicionado|split/.test(t)?raw:"",servico:serviceType(t)},reply:welcome+" "+nameQuestion};
+  }
   if(/preco|valor|quanto custa|quanto fica|orcamento|quanto cobram/.test(t))
     return {stage,mode,data,reply:price(raw,data.servico)+"\n\nSe desejar, posso registrar uma solicitação; escreva *MENU* para ver as opções."};
   if(stage==="menu"){
@@ -284,7 +397,7 @@ export function advance(session, incoming) {
   }
   if(stage==="confirmar"){
     if(/^(sim|confirmar|confirmo|ok)$/.test(t))
-      return {stage:"menu",mode:"bot",data:{},reply:null,order:{...data}};
+      return {stage:"encerrado",mode:"bot",data:{},reply:null,order:{...data}};
     if(/^(nao|não)$/.test(t))
       return {stage:"menu",mode:"bot",data:{},reply:"Sem problemas! Não foi criado um pedido.\n\n"+MENU};
     return {stage,mode,data,reply:"Para proteger seus dados, só registro a solicitação com sua autorização. Responda *SIM* para registrar ou *CANCELAR* para desistir."};
@@ -295,5 +408,5 @@ export function advance(session, incoming) {
 export function closingMessage(protocol,when=new Date()) {
   const hour=Number(new Intl.DateTimeFormat("en-GB",{timeZone:"America/Sao_Paulo",hour:"2-digit",hourCycle:"h23"}).format(when));
   const greeting=hour>=5&&hour<12?"um ótimo dia":hour>=12&&hour<18?"uma ótima tarde":"uma ótima noite";
-  return "✅ *Solicitação recebida!*\nProtocolo: *"+protocol+"*\n\nO técnico *Leonardo Moreira*, responsável pelo atendimento, entrará em contato em breve para avaliar o pedido. Nenhuma compra ou valor está confirmado.\n\nObrigado pelo contato e tenha "+greeting+"!";
+  return "✅ *Solicitação recebida!*\nProtocolo: *"+protocol+"*\n\nO técnico *Leonardo Moreira*, responsável pelo atendimento, entrará em contato em breve para avaliar o pedido. Leonardo confirmará os próximos passos por aqui.\n\nObrigado pelo contato e tenha "+greeting+"!";
 }

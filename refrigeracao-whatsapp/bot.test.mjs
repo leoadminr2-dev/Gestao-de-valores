@@ -2,13 +2,13 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {advance,price,closingMessage} from "./bot.mjs";
 const empty={stage:"menu",mode:"bot",data:{}};
-test("boas-vindas não anunciam preços",()=>{const r=advance(empty,{text:"olá"});assert.match(r.reply,/Como podemos ajudar/);assert.doesNotMatch(r.reply,/R\$\s*\d/);});
+test("boas-vindas não anunciam preços",()=>{const r=advance(empty,{text:"olá"});assert.match(r.reply,/atendimento automático/);assert.doesNotMatch(r.reply,/R\$\s*\d/);});
 test("consultas explícitas mostram somente valores iniciais",()=>{assert.match(price("preço limpeza"),/R\$ 280/);assert.match(price("troca compressor"),/R\$ 550/);});
 test("solicitação exige consentimento",()=>{
  let r=advance(empty,{text:"1"});assert.equal(r.stage,"ar_escolha");
  r=advance(r,{text:"1"});assert.equal(r.stage,"nome");
- r=advance(r,{text:"Ana Souza"});r=advance(r,{text:"Irajá"});r=advance(r,{text:"Split LG 9000"});r=advance(r,{text:"Quinta de manhã"});
- assert.equal(r.stage,"confirmar");assert.equal(r.order,undefined);
+ r=advance(r,{text:"Ana Souza"});r=advance(r,{text:"Rua Exemplo, 10, Irajá, Rio"});r=advance(r,{text:"Split LG 9000"});
+ assert.equal(r.stage,"revisao_guiada");assert.equal(r.order,undefined);
  r=advance(r,{text:"SIM"});assert.equal(r.order.cliente,"Ana Souza");
 });
 test("humano impede respostas até MENU",()=>{let r=advance(empty,{text:"5"});assert.equal(r.mode,"human");r=advance(r,{text:"ajuda"});assert.equal(r.reply,null);r=advance(r,{text:"menu"});assert.equal(r.mode,"bot");});
@@ -48,7 +48,7 @@ test("YCloud eco do WhatsApp Business suspende robô do destinatário",()=>{
 });
 
 test("menu curto e espaçado apresenta cinco categorias sem preços e sem Ler mais desnecessário",()=>{
- const r=advance(empty,{text:"Olá"});
+ const r=advance(empty,{text:"menu"});
  for(const label of ["Ar-condicionado","Geladeiras, freezers e lavadoras","Empresas e contratos","Agendamento e acompanhamento","Falar com Leonardo"])
    assert.match(r.reply,new RegExp(label));
  for(let n=1;n<=5;n++)assert.match(r.reply,new RegExp(n+"️⃣"));
@@ -253,4 +253,26 @@ test("pedido direto de venda pula submenu e preserva exigência de mídias",()=>
  assert.equal(r.stage,"venda_midia");
  assert.match(r.reply,/foto/i);
  assert.match(r.reply,/vídeo/i);
+});
+
+test("instalação citada depois de comprar, endereço fragmentado e horário complementar",()=>{
+ let r=empty;
+ const send=text=>r=advance(r,{text});
+ send("Tô pra comprar meu ar condicionado");assert.match(r.reply,/automático/);
+ send("Queria fazer um orçamento de instalação contigo");send("Maria");
+ send("Maria");assert.equal(r.stage,"endereco");
+ send("Rua Exemplo");send("12");send("Tanque, Rio de Janeiro");
+ send("Split, 9000 BTUs");assert.match(r.reply,/650,00/);
+ send("Hoje");send("Manhã");assert.match(r.reply,/Hoje · Manhã/);
+ send("SIM");assert.equal(r.order.bairro,"Tanque, Rio de Janeiro");
+ send("Ok");assert.equal(r.reply,null);
+});
+test("limpeza de janela, correção do endereço e confirmação única",()=>{
+ let r=empty;
+ const send=text=>r=advance(r,{text});
+ send("Quanto custa a lavagem de ar de janela?");send("Ana");send("Rua A, 24, Centro, Rio");
+ send("Uma unidade");assert.match(r.reply,/250,00/);
+ send("corrigir");send("endereço");send("Rua B, 18, Penha, Rio");
+ assert.match(r.reply,/Rua B/);send("SIM");assert.match(r.order.orcamento,/250,00/);
+ send("SIM");assert.equal(r.order,undefined);
 });

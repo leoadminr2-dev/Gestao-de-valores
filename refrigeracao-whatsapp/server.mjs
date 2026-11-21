@@ -188,6 +188,8 @@ async function wixInsert(order){
   servico:String(d.servico||""),
   descricao:("Solicitação recebida pelo WhatsApp oficial. "
     +(d.tipoAtendimento?"Atendimento: "+String(d.tipoAtendimento)+". ":"")
+    +(d.endereco?"Endereço: "+d.endereco+". ":"")
+    +(d.orcamento?"Orçamento apresentado: "+d.orcamento+" ":"")
     +(d.empresa?"Empresa: "+String(d.empresa)+". ":"")
     +"Preferência de atendimento ou retorno: "+String(d.preferencia||"A combinar")
     +(String(d.servico||"").startsWith("Venda")?". Valor pretendido pelo vendedor: "+String(d.valorPretendido||"Não informado")+". Negociável: "+String(d.valorNegociavel||"Não informado")+". Foto e vídeo recebidos no WhatsApp comercial para avaliação do equipamento; visualizar diretamente na conversa.":"")).slice(0,1500),
