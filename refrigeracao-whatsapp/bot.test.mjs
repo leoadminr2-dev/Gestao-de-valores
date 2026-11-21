@@ -318,3 +318,37 @@ test("orçamento com bairro; rua e número somente depois do aceite",()=>{
  assert.match(r.reply,/Tanque/);send("CONFIRMAR");assert.equal(r.order.bairro,"Tanque");
  assert.match(r.order.endereco,/Rua Exemplo, 5, Rio de Janeiro/);
 });
+
+test("venda no fluxo guiado sai do ciclo e preserva os dados já informados",()=>{
+ for(const text of ["Venda de máquina de lavar","Venda","Vender"]){
+  let r=advance({stage:"necessidade",mode:"bot",data:{guided:true,cliente:"Ana",bairro:"Vaz Lobo",servico:""}},{text});
+  assert.equal(r.stage,"venda_midia",text);
+  assert.equal(r.data.guided,false);
+  assert.equal(r.data.bairro,"Vaz Lobo");
+  assert.doesNotMatch(r.reply,/instalação, limpeza, conserto/);
+  r=advance(r,{text:"Venda"});assert.doesNotMatch(r.reply,/recebid/i);
+  r=advance(r,{type:"image"});r=advance(r,{type:"video"});
+  assert.equal(r.stage,"equipamento");assert.equal(r.data.cliente,"Ana");
+  r=advance(r,{text:"Máquina Electrolux 12kg, funcionando"});
+  assert.equal(r.stage,"venda_valor");
+  r=advance(r,{text:"600"});r=advance(r,{text:"Sim"});r=advance(r,{text:"A combinar"});
+  assert.equal(r.stage,"confirmar");assert.equal(r.order,undefined);
+  r=advance(r,{text:"SIM"});assert.equal(r.order.bairro,"Vaz Lobo");
+ }
+});
+test("pergunta se a empresa compra inicia avaliação de venda em qualquer entrada",()=>{
+ for(const text of ["Você compra máquina de lavar??","Vocês compram geladeira?","Venda de máquina de lavar","Vender"]){
+  for(const stage of ["menu","assunto","eletro_escolha"]){
+   const r=advance({stage,mode:"bot",data:{}},{text});
+   assert.equal(r.stage,"venda_midia",stage+": "+text);
+   assert.equal(r.data.servico,"Venda de equipamento");
+  }
+ }
+});
+test("compra no fluxo guiado aproveita nome e bairro",()=>{
+ for(const text of ["Compra","Comprar","Quero comprar uma geladeira"]){
+  const r=advance({stage:"necessidade",mode:"bot",data:{guided:true,cliente:"Ana",bairro:"Vaz Lobo"}},{text});
+  assert.equal(r.stage,"equipamento");assert.equal(r.data.servico,"Compra de equipamento");
+  assert.equal(r.data.guided,false);assert.equal(r.data.bairro,"Vaz Lobo");
+ }
+});

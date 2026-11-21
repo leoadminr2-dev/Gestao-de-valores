@@ -106,3 +106,8 @@ test("conversa pessoal antiga não aciona com palavras comerciais isoladas",()=>
  assert.equal(shouldHandleMessage({phone:"5521988887777",text:"Minha geladeira não gela",session:privateSession,now}),false);
  assert.equal(shouldHandleMessage({phone:"5521988887777",text:"Quero vender minha geladeira",session:privateSession,now}),true);
 });
+
+test("compra e venda de equipamento ativam o atendimento comercial",()=>{
+ for(const text of ["Você compra máquina de lavar??","Vocês compram geladeira?","Venda de máquina de lavar","Vendo uma lavadora"])
+  assert.equal(isCommercialIntent(text),true,text);
+});

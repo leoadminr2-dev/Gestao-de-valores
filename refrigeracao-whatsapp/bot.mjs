@@ -58,6 +58,10 @@ function orderFlow(servico, previous={}, extra={}) {
     : servico.startsWith("Contrato")
     ? "Vou reunir os detalhes para uma proposta adequada à sua empresa."
     : "Perfeito! Vou organizar as informações para avaliarmos seu atendimento.";
+  if(servico.startsWith("Compra") && data.cliente){
+    return {stage:data.bairro?"equipamento":"bairro",mode:"bot",data,
+      reply:data.bairro?askEquipment(data):"Em qual bairro e cidade será o atendimento?"};
+  }
   return isCompany && !data.empresa
     ? {stage:"empresa",mode:"bot",data,reply:intro+"\n\nQual é o nome da empresa ou estabelecimento?"}
     : {stage:"nome",mode:"bot",data,reply:intro+"\n\nComo posso chamar você? Informe seu nome, por favor."};
@@ -71,7 +75,16 @@ function route(raw, previous={}) {
     return orderFlow("Limpeza profunda e higienização",previous);
   return null;
 }
+function marketIntent(t) {
+  // “Vocês compram?” significa que o cliente quer vender para a empresa.
+  if (/\b(voc[eê]s?|vc|vcs)\s+(?:tambem\s+)?compra(?:m)?\b/.test(t)) return "Venda de equipamento";
+  if (/\b(venda|vender|vendo)\b/.test(t) && !/compra e venda/.test(t)) return "Venda de equipamento";
+  if (/^(compra|comprar)[.!? ]*$/.test(t) || /\b(quero|pretendo|gostaria|preciso)\s+comprar\b/.test(t)) return "Compra de equipamento";
+  return "";
+}
 function initialIntent(t, previous={}) {
+  const market=marketIntent(t);
+  if(market)return orderFlow(market,previous,{guided:false,relato:[previous.relato,t].filter(Boolean).join(" ").slice(-800)});
   // Compatibilidade: antigas opções 6-8 permanecem aceitas, mas não aparecem no menu.
   if(t==="6" || /contrato|preventiva|periodic/.test(t))
     return orderFlow("Contrato de manutenção e limpeza",previous,{tipoAtendimento:"Empresarial"});
@@ -229,6 +242,8 @@ function guidedStep(stage,data,raw,t) {
     return next("revisao_guiada",guidedReview(data));
   }
   if(stage==="necessidade"){
+    const market=marketIntent(t);
+    if(market)return orderFlow(market,data,{guided:false,relato:[data.relato,raw].filter(Boolean).join(" ").slice(-800)});
     const history=[data.relato,raw].filter(Boolean).join(" ").slice(-800);
     data.servico=serviceType(t)||data.servico||serviceType(norm(history));
     if(!data.servico){
@@ -315,8 +330,11 @@ export function advance(session, incoming) {
     if(incoming?.type==="image") data.fotos=Math.min(20,Number(data.fotos||0)+1);
     if(incoming?.type==="video") data.videoRecebido=true;
     if(Number(data.fotos||0)>0 && data.videoRecebido===true){
-      return {stage:"nome",mode,data,reply:"✅ *Foto e vídeo recebidos!* Obrigado por enviar as imagens para avaliação.\n\nComo posso chamar você? Informe seu nome, por favor."};
+      const nextStage=data.cliente?(data.bairro?"equipamento":"bairro"):"nome";
+      const question=nextStage==="equipamento"?askEquipment(data):nextStage==="bairro"?"Em qual bairro e cidade fica o equipamento?":nameQuestion;
+      return {stage:nextStage,mode,data,reply:"✅ *Foto e vídeo recebidos!* Obrigado por enviar as imagens para avaliação.\n\n"+question};
     }
+    if(!["image","video"].includes(incoming?.type))return {stage,mode,data,reply:"Para avaliar o equipamento, envie "+(Number(data.fotos||0)>0?"um vídeo":data.videoRecebido?"uma foto":"uma foto e um vídeo")+" aqui na conversa."};
     if(Number(data.fotos||0)===0){
       return {stage,mode,data,reply:"🎥 Vídeo recebido! Para continuar, falta enviar *uma foto* do equipamento aqui na conversa."};
     }
@@ -359,6 +377,8 @@ export function advance(session, incoming) {
     if(!isCommercialIntent(raw))return {stage,mode,data,reply:null};
     stage="menu";
   }
+  if(["menu","assunto","eletro_escolha","mercado"].includes(stage) && marketIntent(t))
+    return orderFlow(marketIntent(t),data,{guided:false,relato:[data.relato,raw].filter(Boolean).join(" ").slice(-800)});
   if(stage==="assunto"){
     if(/^(nao\b|outro\b|pessoal\b)/.test(t))
       return {stage:"outro_assunto",mode,data:{},reply:"Tudo bem! Vou deixar a conversa para o Leonardo."};
