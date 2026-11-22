@@ -47,7 +47,7 @@ function orderFlow(servico, previous={}, extra={}) {
   if(servico.startsWith("Venda")){
     return {stage:"venda_midia",mode:"bot",data:{
       ...data,fotos:0,videoRecebido:false,mediaItems:[]
-    },reply:"♻️ *Vamos avaliar o equipamento que deseja vender!*\n\n📷 Envie pelo menos *1 foto* do equipamento (de preferência mostrando o estado geral).\n🎥 Envie também *1 vídeo curto* mostrando seu funcionamento ou o defeito.\n\nMande os dois aqui nesta conversa, em qualquer ordem. Depois vou pedir seus dados e detalhes do aparelho.\n\nPara voltar ao menu, digite *0*."};
+    },reply:"♻️ *Vamos avaliar o equipamento que deseja vender!*\n\n📷 Envie pelo menos *1 foto* do equipamento (de preferência mostrando o estado geral).\n🎥 Envie também *1 vídeo curto* mostrando seu funcionamento ou o defeito.\n\nMande os dois aqui nesta conversa, em qualquer ordem. Depois completamos o que faltar para Leonardo avaliar.\n\nPara voltar ao menu, digite *0*."};
   }
   if (serviceType(norm(servico)) && !servico.startsWith("Contrato") && data.tipoAtendimento!=="Empresarial") {
     return {stage:"nome",mode:"bot",data:{...data,guided:true},reply:welcome+"\n\n"+explainService(data.servico)+"\n\n"+nameQuestion};
@@ -188,8 +188,27 @@ function explainService(service) {
   return "Aqui na Leonardo Moreira Refrigeração, primeiro entendemos o que você precisa. Depois explicamos como o serviço será feito, o que está incluído e quanto fica, para você decidir.";
 }
 
+function contactDetails(raw) {
+  const fields={};
+  const intro=raw.match(/(?:^|[.,!;]\s*|\b(?:oi|olá)[ ,]+)(?:sou (?:o |a )?|me chamo |meu nome é )([\p{L}'’-]+(?: [\p{L}'’-]+){0,4}?)(?=,|[.!;]|\s+(?:do bairro|do|da|de|moro|e quero|e preciso)\s|$)/iu);
+  if (intro && !/\b(cliente|técnico|síndico|responsável)\b/i.test(intro[1])) fields.cliente=intro[1];
+  const location=raw.match(/\b(?:no bairro |meu bairro é |moro (?:em|no|na) )([^,.;!?\n]+)/iu)
+    || (intro && raw.slice(intro.index+intro[0].length).match(/^,?\s+(?:do bairro|de|da|do)\s+([^,.;!?\n]+)/iu));
+  if(location){
+    const value=location[1].split(/\s+(?:e (?:quero|preciso|gostaria)|no \d|no quinto andar)\b/i)[0].trim();
+    if(/^[\p{L}\d][\p{L}\d '’-]{0,59}$/u.test(value))fields.bairro=value;
+  }
+  return fields;
+}
+function elevated(text) {
+  return /\b(?:\d+\s*[º°o]?|primeiro|segundo|terceiro|quarto|quinto|sexto|setimo|oitavo|nono|decimo)\s+andar\b/.test(text);
+}
 function nextDetail(data) {
   const history=norm(data.relato);
+  if (data.servico?.startsWith("Instalação") && elevated(history) && !/varanda|sacada|fachada/.test(history))
+    return "Como o serviço é em andar elevado, precisamos conferir o acesso. A unidade externa vai ficar na varanda ou na fachada do prédio?";
+  if (data.servico?.startsWith("Manutenção") && /geladeira|freezer/.test(history) && /parou|nao gel|sem gel/.test(history))
+    return "Você percebeu a perda de refrigeração no aparelho inteiro ou só em um compartimento?";
   if (/split|janela/.test(history)) {
     if (data.servico?.startsWith("Instalação"))
       return /ponto eletrico|220|tomada|disjuntor/.test(history)
@@ -202,21 +221,34 @@ function nextDetail(data) {
 }
 
 function serviceAnswer(t, service) {
+  const answers=[];
   if (service?.startsWith("Instalação") && /materia(is|l)|tubulacao|suporte/.test(t))
-    return "Na instalação padrão, o cliente fornece o aparelho e os materiais. Leonardo confere o que será necessário para o seu local antes de fechar o orçamento.";
+    answers.push("Na instalação padrão, o cliente fornece o aparelho e os materiais. Leonardo confere o que será necessário para o seu local antes de fechar o orçamento.");
   if (service?.startsWith("Instalação") && /eletric|220\s*v|tomada|disjuntor/.test(t))
-    return "A instalação padrão considera um ponto elétrico adequado disponível. Se precisar de adequação, Leonardo avalia essa parte separadamente antes de fechar o valor.";
+    answers.push("A instalação padrão considera um ponto elétrico adequado disponível. Se precisar de adequação, Leonardo avalia essa parte separadamente antes de fechar o valor.");
   if (service?.startsWith("Manutenção") && /abat|descont.*visita|visita.*descont/.test(t))
-    return "Se você aprovar o conserto, o valor da visita técnica é abatido. Leonardo apresenta o orçamento do reparo após o diagnóstico.";
+    answers.push("Se você aprovar o conserto, o valor da visita técnica é abatido. Leonardo apresenta o orçamento do reparo após o diagnóstico.");
   if (/como (voces |voce |a empresa )?(trabalha|funciona)|o que (inclui|esta incluso|esta incluido)|como e (feita|feito)/.test(t))
-    return explainService(service);
-  return "";
+    answers.push(explainService(service));
+  return answers.join("\n\n");
+}
+
+function beginService(data,raw,service,greet) {
+  const info={...data,guided:true,relato:raw,servico:service};
+  const nextStage=!info.cliente?"nome":!info.bairro?"bairro_inicial":"necessidade";
+  const introduction=greet?(info.cliente?"Olá, "+info.cliente+"! Você está no atendimento automático da Leonardo Moreira Refrigeração.":welcome):"";
+  const t=norm(raw);
+  const accessFirst=nextStage==="necessidade" && service.startsWith("Instalação") && elevated(t);
+  const opening=(/\?|como funciona|como trabalham/.test(t) && serviceAnswer(t,service)) || (accessFirst?"":explainService(service));
+  const prompt=nextStage==="nome"?nameQuestion:nextStage==="bairro_inicial"?neighborhoodQuestion:nextDetail(info);
+  return {stage:nextStage,mode:"bot",data:info,reply:[introduction,opening,prompt].filter(Boolean).join("\n\n")};
 }
 
 function quote(data) {
   const detail=norm(data.equipamento);
   if (data.servico.startsWith("Manutenção"))
     return "*Visita técnica*\nLeonardo avalia o aparelho e identifica a causa do problema.\n*Valor da visita · R$ 120,00* O valor da visita é abatido se você aprovar o conserto. Peças e mão de obra do reparo serão orçadas após o diagnóstico.";
+  if (data.servico.startsWith("Instalação") && /fachada|andaime|rapel|precis[ao] (?:puxar|instalar) (?:o )?220/.test(detail)) return null;
   if (data.servico.startsWith("Instalação") && /split/.test(detail))
     return "❄️ *Instalação padrão de split*\nInclui fixação, interligação, teste de estanqueidade, vácuo e teste de funcionamento. O cliente fornece o aparelho e os materiais. Acesso especial e adequação elétrica exigem avaliação separada.\n*Mão de obra estimada · R$ 650,00 por aparelho*";
   if (data.servico.startsWith("Limpeza") && /janela|split/.test(detail)) {
@@ -250,7 +282,7 @@ function guidedStep(stage,data,raw,t) {
     }
     if (!/^[\p{L}][\p{L}'’ -]{1,79}$/u.test(raw)) return next(stage,nameQuestion);
     data.cliente=raw;
-    if(data.bairro)return next("necessidade",data.servico?askEquipment(data):serviceQuestion);
+    if(data.bairro)return next("necessidade",nextDetail(data));
     return next("bairro_inicial",neighborhoodQuestion);
   }
   if (stage==="bairro_inicial" || stage==="endereco") {
@@ -367,6 +399,23 @@ export function advance(session, incoming) {
     return {stage:"menu",mode:"bot",data:{},reply:"Tudo bem, sem problema. Não registrei nenhum novo pedido.\n\n"+MENU};
   if(/cheiro de queimado|fumaca|faisca|choque eletrico|principio de incendio/.test(t))
     return {stage,mode:"human",data,reply:"⚠️ Sinto muito por essa situação. Por segurança, pare de usar o equipamento e, se puder fazer isso sem risco, desligue a energia. Havendo fogo ou perigo imediato, acione a emergência. Não tente abrir ou reparar o aparelho. Vou deixar a conversa para Leonardo avaliar seu relato."};
+  const intake=["menu","encerrado","assunto","nome","bairro_inicial","necessidade","mercado","eletro_escolha"].includes(stage);
+  const supplied=intake?contactDetails(raw):{};
+  Object.assign(data,supplied);
+  const topic=data.servico || serviceType(t);
+  const conditions=[];
+  if (/parcel|cartao|forma[s]? de pagamento/.test(t)) conditions.push("as condições de pagamento");
+  if (/garantia/.test(t)) conditions.push("a garantia");
+  if (/tem desconto|faz por menos|preco negociavel/.test(t)) conditions.push("a possibilidade de desconto");
+  if (/prazo de entrega/.test(t)) conditions.push("o prazo de entrega");
+  const parts=t.split(/\?+|\s+e\s+(?=(?:voces?|qual|quando|quem|como|quanto|por que|tem|aceita|fazem)\b)/).map(part=>part.trim()).filter(Boolean);
+  const known=serviceAnswer(t,topic);
+  const partial=Boolean(known && parts.length>1 && parts.some(part=>
+    /^(voces?|qual|quando|quem|como|quanto|por que|tem|aceita|fazem)\b/.test(part) && !serviceAnswer(part,topic)));
+  if ((conditions.length || partial) && (intake || data.guided) && !["venda_valor","venda_negociavel"].includes(stage)){
+    const pending=conditions.length?"a confirmação sobre "+conditions.join(" e "):"a outra dúvida da sua mensagem";
+    return {stage,mode:"human",data:{...data,servico:topic,duvidaCliente:raw},reply:[stage==="menu"?welcome:"",known,"Vou deixar com Leonardo "+pending+". Ele continua por aqui com os detalhes que você já enviou."].filter(Boolean).join("\n\n")};
+  }
   if(stage==="venda_midia"){
     const m=incoming?.media;
     if(m&&m.type===incoming.type&&["image","video"].includes(incoming.type)&&["ycloud","meta"].includes(m.provider)&&/^[A-Za-z0-9_-]{1,160}$/.test(String(m.id||""))){
@@ -426,33 +475,24 @@ export function advance(session, incoming) {
   }
   if(["menu","assunto","eletro_escolha","mercado"].includes(stage) && marketIntent(t))
     return orderFlow(marketIntent(t),data,{guided:false,relato:[data.relato,raw].filter(Boolean).join(" ").slice(-800)});
-  if (["menu","assunto"].includes(stage) && /\b(garantia|parcelam|parcelamento|aceitam cartao|tem desconto|prazo de entrega)\b/.test(t))
-    return {stage,mode:"human",data:{...data,duvidaCliente:raw},reply:"Vou passar sua pergunta ao Leonardo para ele confirmar as condições para o seu caso por aqui."};
   if(stage==="assunto"){
     if(/^(nao\b|outro\b|pessoal\b)/.test(t))
       return {stage:"outro_assunto",mode,data:{},reply:"Tudo bem! Vou deixar a conversa para o Leonardo."};
     if(/^(sim|isso|e sim)[.! ]*$/.test(t) || statedTopic)
-      return {stage:"nome",mode,data:{...data,guided:true,relato:statedTopic?raw:"",servico:serviceType(t)},reply:explainService(serviceType(t))+"\n\n"+nameQuestion};
+      return beginService(data,raw,serviceType(t),false);
     return {stage,mode,data,reply:"Seu contato é sobre refrigeração? Pode responder SIM, OUTRO ASSUNTO ou contar o que precisa."};
   }
   if(stage==="encerrado"){
     if(ack.test(t)||t==="sim")return {stage,mode,data,reply:null};
     stage="menu";
   }
+  if(data.guided && ["nome","bairro_inicial"].includes(stage) && Object.keys(supplied).length)
+    return beginService(data,[data.relato,raw].filter(Boolean).join(" ").slice(-800),data.servico || serviceType(t),false);
   if(data.guided)return guidedStep(stage,data,raw,t);
   if(stage==="menu" && !/^\d+$/.test(t) && !/contrato|empresa|residencial|protocolo|acompanhar|quero vender|quero comprar|agendar online/.test(t)){
     if(ack.test(t))return {stage,mode,data,reply:null};
     if(!statedTopic)return {stage:"assunto",mode,data,reply:welcome+"\n\n"+explainService("")+"\n\nSeu contato é sobre refrigeração? Pode me contar o que precisa ou responder OUTRO ASSUNTO."};
-    const service = serviceType(t);
-    const opening = (/\?|como funciona|como trabalham/.test(t) && serviceAnswer(t,service)) || explainService(service);
-    const name = raw.match(/(?:^|[,.!;]\s*|\b(?:oi|olá)[ ,]+)(?:sou (?:o |a )?|me chamo |meu nome é )([\p{L}]+(?: [\p{Lu}][\p{L}]+){0,3})(?=[,!.;]|$)/iu);
-    const neighborhood = raw.match(/\b(?:no bairro |meu bairro é |moro (?:em|no|na) )([\p{L}][\p{L} '-]{1,60}?)(?=[,.!;]|$)/iu);
-    const info = {...data,guided:true,relato:raw,servico:service};
-    if (name && !/\b(?:de|do|da|bairro|preciso|quero|cliente|técnico)\b/i.test(name[1])) info.cliente=name[1].trim();
-    if (neighborhood) info.bairro=neighborhood[1].trim();
-    const nextStage = !info.cliente?"nome":!info.bairro?"bairro_inicial":"necessidade";
-    const prompt = nextStage==="nome"?nameQuestion:nextStage==="bairro_inicial"?neighborhoodQuestion:nextDetail(info);
-    return {stage:nextStage,mode,data:info,reply:welcome+"\n\n"+opening+"\n\n"+prompt};
+    return beginService(data,raw,serviceType(t),true);
   }
   if(/preco|valor|quanto custa|quanto fica|orcamento|quanto cobram/.test(t))
     return {stage,mode,data,reply:explainService(data.servico || serviceType(t))+"\n\n"+(data.servico?askEquipment(data):serviceQuestion)};
