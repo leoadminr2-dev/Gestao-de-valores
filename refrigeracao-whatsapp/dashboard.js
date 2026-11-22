@@ -41,6 +41,17 @@ async function refresh(){
  text("lastUpdate","Atualizando dados...");
  try{
   const data=await call("/overview");
+  const handoffs=data.handoffs||[];
+  el("handoffSection").hidden=handoffs.length===0;
+  el("handoffList").replaceChildren(...handoffs.map(row=>{
+    const item=document.createElement("li");
+    const heading=document.createElement("strong");
+    heading.textContent=[row.cliente,row.bairro,row.phone].filter(Boolean).join(" · ");
+    const description=document.createElement("p");
+    description.textContent=[row.servico,row.detalhes,row.pendencia && "A confirmar: "+row.pendencia].filter(Boolean).join(" · ");
+    item.append(heading,description);
+    return item;
+  }));
   allOrders=data.orders||[];
   metrics=Object.fromEntries((data.metrics||[]).map(x=>[x.status,Number(x.total)]));
   const total=Object.values(metrics).reduce((a,b)=>a+b,0);
@@ -431,3 +442,4 @@ document.addEventListener("DOMContentLoaded",()=>{
  ["editStatus","editDate","editAmount"].forEach(id=>el(id).addEventListener("change",clearReplyPreview));
  void init();
 });
+

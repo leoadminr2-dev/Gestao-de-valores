@@ -83,7 +83,7 @@ test("geladeiras e lavadoras mantêm consertos e compra e venda",()=>{
  assert.equal(advance(a,{text:"2"}).data.servico,"Compra de equipamento");
  assert.equal(advance(a,{text:"3"}).data.servico,"Venda de equipamento");
  assert.equal(advance(empty,{text:"Minha máquina de lavar não centrifuga"}).data.servico,"Manutenção e consertos");
- assert.equal(advance(empty,{text:"Minha geladeira não gela"}).stage,"nome");
+ assert.equal(advance(empty,{text:"Minha geladeira não gela"}).reply.includes("freezer"),true);
 });
 test("residencial ainda funciona por linguagem natural",()=>{
  const a=advance(empty,{text:"atendimento residencial"});
@@ -271,9 +271,9 @@ test("instalação citada depois de comprar, endereço fragmentado e horário co
 test("limpeza de janela, correção do endereço e confirmação única",()=>{
  let r=empty;
  const send=text=>r=advance(r,{text});
- send("Quanto custa a lavagem de ar de janela?");send("Ana");send("Rua A, 24, Centro, Rio");
- send("Uma unidade");assert.match(r.reply,/250,00/);
- send("SIM");send("corrigir");send("endereço");send("Rua B, 18, Penha, Rio");
+ send("Quanto custa a lavagem de ar de janela?");assert.doesNotMatch(r.reply,/R\$/);
+ send("Sim, fácil acesso");assert.match(r.reply,/250,00/);
+ send("Pode marcar");send("Ana");send("Centro");send("Rua A, 24, Centro, Rio");send("corrigir");send("endereço");send("Rua B, 18, Penha, Rio");
  assert.match(r.reply,/Rua B/);send("SIM");assert.match(r.order.orcamento,/250,00/);
  send("SIM");assert.equal(r.order,undefined);
 });
@@ -308,12 +308,12 @@ test("orçamento genérico esclarece assunto antes de pedir nome e endereço",()
 test("orçamento com bairro; rua e número somente depois do aceite",()=>{
  let r=empty;
  const send=text=>r=advance(r,{text});
- send("Quero limpar meu ar de janela");send("Ana");
- assert.match(r.reply,/bairro/);assert.doesNotMatch(r.reply,/rua|número/);
- send("Tanque");send("Um aparelho");assert.match(r.reply,/250,00/);
+ send("Quero limpar meu ar de janela");assert.match(r.reply,/acesso/);
+ send("Sim");assert.match(r.reply,/250,00/);
  assert.equal(r.data.endereco,undefined);
  assert.equal(advance(r,{text:"Não"}).stage,"encerrado");
- send("SIM");assert.equal(r.stage,"endereco_final");assert.equal(r.order,undefined);
+ send("SIM");send("Ana");assert.match(r.reply,/bairro/);
+ send("Tanque");assert.equal(r.stage,"endereco_final");assert.equal(r.order,undefined);
  send("Rua Exemplo");send("5");send("Rio de Janeiro");assert.equal(r.stage,"revisao_guiada");
  assert.match(r.reply,/Tanque/);send("CONFIRMAR");assert.equal(r.order.bairro,"Tanque");
  assert.match(r.order.endereco,/Rua Exemplo, 5, Rio de Janeiro/);
@@ -350,5 +350,22 @@ test("compra no fluxo guiado aproveita nome e bairro",()=>{
   const r=advance({stage:"necessidade",mode:"bot",data:{guided:true,cliente:"Ana",bairro:"Vaz Lobo"}},{text});
   assert.equal(r.stage,"equipamento");assert.equal(r.data.servico,"Compra de equipamento");
   assert.equal(r.data.guided,false);assert.equal(r.data.bairro,"Vaz Lobo");
+ }
+});
+
+
+test("aceite com correção exige nova conferência antes do registro",()=>{
+ let r={stage:"aceite_orcamento",mode:"bot",data:{guided:true,endereco:"Rua A, 15, Penha, Rio"}};
+ r=advance(r,{text:"Por mim pode marcar, mas o número da casa é 42"});
+ assert.equal(r.stage,"revisao_guiada");assert.equal(r.order,undefined);assert.match(r.reply,/Rua A, 42/);
+ r=advance(r,{text:"o número correto é 43"});assert.equal(r.order,undefined);assert.match(r.reply,/Rua A, 43/);
+ assert.equal(advance(r,{text:"Tudo certo"}).order.endereco,"Rua A, 43, Penha, Rio");
+});
+test("fachada e acesso difícil seguem para avaliação sem tarifa padrão",()=>{
+ for(const [pedido,resposta] of [["Limpeza de ar de janela","Não"],["Instalar split no quinto andar","Na fachada"]]){
+  const first=advance(empty,{text:pedido});
+  assert.match(first.reply,/acesso/i);assert.doesNotMatch(first.reply,/R\$/);
+  const second=advance(first,{text:resposta});
+  assert.equal(second.data.avaliacaoPendente,true);assert.doesNotMatch(second.reply,/R\$/);
  }
 });

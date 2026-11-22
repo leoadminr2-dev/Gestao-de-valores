@@ -23,6 +23,7 @@ test("painel serves login page, blocks anonymous access and accepts authorized s
    }
    if(sql.includes("GROUP BY"))return {rows:[{status:"novo",total:1}],rowCount:1};
    if(sql.includes("ORDER BY created_at DESC"))return {rows:[{protocol:"WA-20261104-F39A0E01",phone:"5521999999999",payload:{cliente:"Cliente teste"},sync_status:"synced",operation_status:"novo",created_at:new Date().toISOString(),source:"whatsapp"}],rowCount:1};
+   if(sql.includes("FROM wa_sessions WHERE"))return {rows:[{cliente:"Cliente de teste",pendencia:"Conferir acesso"}]};
    if(sql.includes("UPDATE wa_orders SET"))return {rows:[{protocol:"WA-20261104-F39A0E01",operation_status:"agendado"}],rowCount:1};
    throw Error("Unexpected SQL "+sql);
   }
@@ -55,6 +56,7 @@ test("painel serves login page, blocks anonymous access and accepts authorized s
   assert.equal(overview.status,200);
   const data=await overview.json();
   assert.equal(data.orders.length,1);
+  assert.equal(data.handoffs[0].pendencia,"Conferir acesso");
   const badCsrf=await call("/painel/api/ordens/WA-20261104-F39A0E01",{method:"PATCH",headers:{"content-type":"application/json",cookie},body:JSON.stringify({status:"agendado"})});
   assert.equal(badCsrf.status,403);
   const patch=await call("/painel/api/ordens/WA-20261104-F39A0E01",{method:"PATCH",headers:{"content-type":"application/json","x-csrf-token":csrf,cookie},body:JSON.stringify({status:"agendado",appointment:null,amount:280,notes:"teste"})});
@@ -121,3 +123,4 @@ test("galeria de vídeo é privada, valida o link e suporta reprodução por int
   delete process.env.YCLOUD_API_KEY;
  }
 });
+

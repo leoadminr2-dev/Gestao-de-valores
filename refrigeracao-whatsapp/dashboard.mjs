@@ -191,11 +191,17 @@ export function createDashboard(pool,replyOptions={}){
    }catch{answer(res,502,{error:"falha_ao_carregar_midia"});return true;}
   }
   if(url.pathname==="/painel/api/overview"&&req.method==="GET"){
-   const [metrics,data]=await Promise.all([
+   const [metrics,data,handoffs]=await Promise.all([
     pool.query("SELECT operation_status AS status, count(*)::int AS total FROM wa_orders GROUP BY operation_status"),
-    pool.query("SELECT protocol,phone,payload,created_at,updated_at,sync_status,operation_status,appointment_at,estimate_amount,admin_notes,source,wix_item_id,wix_update_pending,wix_update_error FROM wa_orders ORDER BY created_at DESC LIMIT 500")
+    pool.query("SELECT protocol,phone,payload,created_at,updated_at,sync_status,operation_status,appointment_at,estimate_amount,admin_notes,source,wix_item_id,wix_update_pending,wix_update_error FROM wa_orders ORDER BY created_at DESC LIMIT 500"),
+    pool.query(`SELECT phone, updated_at, data->>'cliente' AS cliente, data->>'bairro' AS bairro,
+      data->>'servico' AS servico, COALESCE(NULLIF(data->>'equipamento',''),data->>'relato') AS detalhes,
+      COALESCE(data->>'duvidaCliente',data->>'duvidaOrcamento',
+        CASE WHEN data->>'avaliacaoPendente'='true' THEN 'Avaliar condições e valor do serviço' END) AS pendencia
+      FROM wa_sessions WHERE data->>'commercialActivated'='true' AND
+      (mode='human' OR data->>'handoffPending'='true') ORDER BY updated_at DESC LIMIT 50`)
    ]);
-   answer(res,200,{metrics:metrics.rows,orders:data.rows,limited:data.rowCount===500});return true;
+   answer(res,200,{metrics:metrics.rows,orders:data.rows,handoffs:handoffs.rows,limited:data.rowCount===500});return true;
   }
   const match=url.pathname.match(/^\/painel\/api\/ordens\/((?:WA|LMR|FORM)-[A-Z0-9-]{8,64})$/);
   if(match&&req.method==="PATCH"){
@@ -222,3 +228,4 @@ export function createDashboard(pool,replyOptions={}){
   answer(res,405,{error:"metodo_nao_permitido"});return true;
  };
 }
+

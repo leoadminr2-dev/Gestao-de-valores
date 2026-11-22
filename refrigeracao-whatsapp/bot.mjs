@@ -238,6 +238,19 @@ function beginService(data,raw,service,greet) {
   const nextStage=!info.cliente?"nome":!info.bairro?"bairro_inicial":"necessidade";
   const introduction=greet?(info.cliente?"Olá, "+info.cliente+"! Você está no atendimento automático da Leonardo Moreira Refrigeração.":welcome):"";
   const t=norm(raw);
+  const fridge=service.startsWith("Manutenção") && /geladeira|refrigerador/.test(t) && /parou|nao gel|sem gel/.test(t);
+  const windowWash=service.startsWith("Limpeza") && /janela/.test(t);
+  const upstairs=service.startsWith("Instalação") && elevated(t);
+  if (fridge || windowWash || upstairs) {
+    info.triagemDireta=true;
+    let prompt=nextDetail(info);
+    if(fridge) prompt=/freezer|parte de (baixo|cima)|compartimento/.test(t)
+      ? "Há quanto tempo você percebeu essa mudança?" : "O freezer também parou de gelar ou o problema está só na parte de baixo?";
+    if(windowWash) prompt=/acesso (simples|facil)|facil acesso|terreo/.test(t)
+      ? "É uma unidade ou são vários aparelhos?" : "O aparelho fica em local de fácil acesso para a limpeza?";
+    const intro=fridge?"Na visita, Leonardo verifica a causa antes de indicar peças ou reparos.":windowWash?"Na higienização, limpamos filtros, serpentina e bandeja e testamos o aparelho após a montagem.":"";
+    return {stage:"necessidade",mode:"bot",data:info,reply:[introduction,intro,prompt].filter(Boolean).join("\n\n")};
+  }
   const accessFirst=nextStage==="necessidade" && service.startsWith("Instalação") && elevated(t);
   const opening=(/\?|como funciona|como trabalham/.test(t) && serviceAnswer(t,service)) || (accessFirst?"":explainService(service));
   const prompt=nextStage==="nome"?nameQuestion:nextStage==="bairro_inicial"?neighborhoodQuestion:nextDetail(info);
@@ -251,6 +264,7 @@ function quote(data) {
   if (data.servico.startsWith("Instalação") && /fachada|andaime|rapel|precis[ao] (?:puxar|instalar) (?:o )?220/.test(detail)) return null;
   if (data.servico.startsWith("Instalação") && /split/.test(detail))
     return "❄️ *Instalação padrão de split*\nInclui fixação, interligação, teste de estanqueidade, vácuo e teste de funcionamento. O cliente fornece o aparelho e os materiais. Acesso especial e adequação elétrica exigem avaliação separada.\n*Mão de obra estimada · R$ 650,00 por aparelho*";
+  if (data.servico.startsWith("Limpeza") && /acesso dificil|dificil acesso|fachada|andaime|rapel|nao (?:e |tem )?(?:de )?facil acesso/.test(detail)) return null;
   if (data.servico.startsWith("Limpeza") && /janela|split/.test(detail)) {
     const unit=/janela/.test(detail)?"R$ 250,00":/\b9\s*(mil|k|[., ]?000)\b/.test(detail)?"R$ 280,00":"";
     if (unit) return "❄️ *Higienização de ar-condicionado*\nInclui limpeza dos filtros, serpentina e bandeja, remontagem e teste de funcionamento.\n*Valor · "+unit+" por aparelho*";
@@ -262,6 +276,24 @@ function guidedReview(data) {
 }
 function guidedStep(stage,data,raw,t) {
   const next=(stage,reply)=>({stage,mode:"bot",data,reply});
+  const accepted=/^(?:sim|aceito|quero|(?:por mim )?pode (?:seguir|marcar|agendar|confirmar|registrar)|quero seguir|vamos seguir|fechado|de acordo|tudo certo|esta certo|confirmo|confirmar)[.! ]*$/.test(t);
+  const correctedNumber=["aceite_orcamento","revisao_guiada","endereco_final"].includes(stage) && !/\?|\bnao\b/.test(t) && t.match(/\b(?:numero (?:da casa |do imovel |certo |correto )?(?:e |eh |para )?|corrigindo o numero (?:para )?)(\d+[a-z]?)\s*[.!]?$/);
+  if(correctedNumber){
+    data.numeroInformado=correctedNumber[1];
+    if(data.endereco){
+      const number=/(,\s*|\bn[º°.]\s*)(?:\d+[a-z]?|s\/n)(?=\s*(?:[,·]|$))/i;
+      if(!number.test(data.endereco)){
+        data.enderecoPartes=[];
+        delete data.endereco;
+        if(stage==="revisao_guiada")return next("ajustar_endereco","Anotei o número "+data.numeroInformado+". Para conferir o endereço, envie a rua, o número e a cidade.");
+      }else{
+        data.endereco=data.endereco.replace(number,(_,prefix)=>prefix+data.numeroInformado);
+        data.enderecoPartes=[data.endereco];
+        if(stage==="revisao_guiada")return next(stage,guidedReview(data));
+      }
+    }
+    if(stage==="endereco_final")return next(stage,"Anotei o número "+data.numeroInformado+". Qual é a rua e a cidade?");
+  }
   const question = /\?/.test(raw) || /^(quanto|qual (?:o )?(?:valor|preco)|como funciona|inclui|aceita[m]? |tem garantia|voces fazem)/.test(t);
   if (question && !marketIntent(t)) {
     const answer = serviceAnswer(t, data.servico || serviceType(t));
@@ -272,6 +304,17 @@ function guidedStep(stage,data,raw,t) {
       return next(stage, explainService(data.servico || serviceType(t))+"\n\n"+resume[stage]);
     if (!(stage==="necessidade" && (pricing || serviceType(t))) && !(stage==="nome" && serviceType(t)))
       return {stage,mode:"human",data:{...data,duvidaCliente:raw},reply:"Vou deixar sua pergunta e o que você já contou com o Leonardo, para ele responder por aqui."};
+  }
+  if(stage==="identificacao_aceite"){
+    const fields=contactDetails(raw);
+    const neededName=!data.cliente;
+    Object.assign(data,fields);
+    if(!data.cliente){
+      if(!/^[\p{L}][\p{L}'’ -]{1,79}$/u.test(raw))return next(stage,nameQuestion);
+      data.cliente=raw;
+    }else if(!neededName && !data.bairro && !fields.cliente)data.bairro=raw;
+    if(!data.bairro)return next(stage,neighborhoodQuestion);
+    return next("endereco_final",(data.numeroInformado?"Envie a rua e a cidade.":"Envie a rua, o número e a cidade.")+(data.numeroInformado?" Já anotei o número "+data.numeroInformado+".":""));
   }
   if (ack.test(t)) return next(stage,stage==="aceite_orcamento"?"Quer seguir? Responda SIM ou NÃO.":null);
   if (stage==="nome") {
@@ -310,6 +353,10 @@ function guidedStep(stage,data,raw,t) {
     const parts=data.enderecoPartes||[];
     if(!parts.some(part=>norm(part)===t))parts.push(raw);
     data.enderecoPartes=parts;
+    if(data.numeroInformado && parts.length && !parts.some(part=>streetNumber.test(part)) && streetPrefix.test(norm(parts[0]))){
+      const [street,...locality]=parts[0].split(/,\s*/);
+      parts.splice(0,1,street,data.numeroInformado,...locality);
+    }
     const address=parts.join(", ");
     if(!streetNumber.test(address))return next(stage,"Qual é o número do imóvel? Se não houver, escreva s/n.");
     if(!/[a-z]{2}/i.test(norm(address).replace(streetNumber,"")))return next(stage,"Qual é o nome da rua?");
@@ -321,6 +368,13 @@ function guidedStep(stage,data,raw,t) {
     return next("revisao_guiada",guidedReview(data));
   }
   if(stage==="necessidade"){
+    if(data.triagemDireta && data.servico?.startsWith("Limpeza") && /janela/.test(norm(data.relato)) && !marketIntent(t)){
+      const access=norm(data.relato+" "+raw);
+      const difficult=/fachada|andaime|rapel|dificil|complicado|sem acesso|nao sei|nao tenho certeza|nao.*facil/.test(access) || /^(nao|negativo)[.! ]*$/.test(t);
+      if(difficult)data.acessoAvaliar=true;
+      else if(!/sim|facil|simples|terreo|tranquilo/.test(t) && !/facil acesso|acesso (simples|facil)|terreo/.test(norm(data.relato)))
+        return next(stage,"Para calcular a limpeza, preciso saber se o aparelho fica em local de fácil acesso. Pode responder sim, não ou explicar como é o local.");
+    }
     const market=marketIntent(t);
     if(market)return orderFlow(market,data,{guided:false,relato:[data.relato,raw].filter(Boolean).join(" ").slice(-800)});
     const history=[data.relato,raw].filter(Boolean).join(" ").slice(-800);
@@ -340,8 +394,10 @@ function guidedStep(stage,data,raw,t) {
       data.perguntouDefeito=true;
       return next(stage,"O que acontece quando você liga o aparelho? Se ainda não souber, pode responder “preciso de avaliação”.");
     }
-    data.equipamento=history;
-    const estimate=quote(data);
+    if(data.triagemDireta && data.servico.startsWith("Limpeza") && /^(nao|dificil)[.! ]*$/.test(t))data.relato=history+" · acesso difícil";
+    data.equipamento=data.relato;
+    const unresolvedAccess=data.triagemDireta && data.servico.startsWith("Instalação") && elevated(norm(history)) && !/varanda|sacada|terreo|facil acesso|acesso (facil|simples)/.test(norm(history));
+    const estimate=data.acessoAvaliar || unresolvedAccess?null:quote(data);
     data.orcamento=estimate || "Avaliação de Leonardo pendente para definir mão de obra, materiais e valor total.";
     data.avaliacaoPendente=!estimate;
     delete data.interesseOrcamento;
@@ -351,8 +407,10 @@ function guidedStep(stage,data,raw,t) {
     return next("aceite_orcamento",message+"\nResponda SIM para seguir, NÃO para encerrar ou envie sua dúvida.");
   }
   if(stage==="aceite_orcamento"){
-    if(/^(sim|aceito|quero|pode seguir|quero seguir|vamos seguir)[.! ]*$/.test(t)){
+    if(accepted || correctedNumber && /^((por mim )?pode (marcar|agendar)|sim|aceito)[,. ]+(mas )?(o )?numero/.test(t)){
+
       data.interesseOrcamento=data.avaliacaoPendente?"Solicitou avaliação":"Quer seguir com o orçamento apresentado";
+      if(data.triagemDireta && (!data.cliente || !data.bairro))return next("identificacao_aceite",data.cliente?neighborhoodQuestion:nameQuestion);
       if(!data.endereco){
         return next("endereco_final","Para completar o pedido, envie a rua, o número (ou s/n) e a cidade. Pode mandar em mensagens separadas."+(data.bairro?" Já anotei o bairro: "+data.bairro+".":""));
       }
@@ -367,7 +425,7 @@ function guidedStep(stage,data,raw,t) {
     return {stage,mode:"human",data:{...data,duvidaOrcamento:raw},reply:"Vou deixar sua dúvida com Leonardo. Ele dará continuidade por aqui."};
   }
   if(stage==="revisao_guiada"){
-    if(/^(sim|confirmo|confirmar)$/.test(t))return {stage:"encerrado",mode:"bot",data:{},reply:null,order:{...data}};
+    if(accepted)return {stage:"encerrado",mode:"bot",data:{},reply:null,order:{...data}};
     if(timing.test(t)){
       data.preferencia=[data.preferencia,raw].filter(Boolean).join(" · ").slice(-150);
       return next(stage,guidedReview(data));
