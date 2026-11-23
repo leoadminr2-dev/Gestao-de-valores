@@ -34,6 +34,10 @@ test("simulação YCloud completa: vídeo, foto, valor pretendido e ordem com ga
   }
  },business);
  let state=advance({stage:"menu",mode:"bot",data:{}},{text:"Quero vender minha geladeira"});
+ assert.equal(state.stage,"nome");
+ state=advance(state,{text:"Cliente de teste"});
+ assert.equal(state.stage,"bairro");
+ state=advance(state,{text:"Cascadura - Rio de Janeiro"});
  assert.equal(state.stage,"venda_midia");
  const v=make("video","919306472440541");
  const i=make("image","592623615738103");
@@ -42,9 +46,7 @@ test("simulação YCloud completa: vídeo, foto, valor pretendido e ordem com ga
  state=advance(state,{type:v.messageType,text:v.text,media:v.media});
  assert.equal(state.stage,"venda_midia");
  state=advance(state,{type:i.messageType,text:i.text,media:i.media});
- assert.equal(state.stage,"nome");
- state=advance(state,{text:"Cliente de teste"});
- state=advance(state,{text:"Cascadura - Rio de Janeiro"});
+ assert.equal(state.stage,"equipamento");
  state=advance(state,{text:"Geladeira Brastemp 375L, não gela"});
  assert.equal(state.stage,"venda_valor");
  state=advance(state,{text:"R$ 1.200,00"});
