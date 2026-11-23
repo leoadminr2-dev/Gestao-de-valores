@@ -154,9 +154,15 @@ test("enquanto a transferência humana está pendente o robô não faz novas per
  assert.match(reset.reply,/Como podemos ajudar/);
 });
 
-test("venda solicita foto e video imediatamente e so prossegue com os dois",()=>{
+
+test("venda apresenta e identifica antes de pedir fotos e video",()=>{
  let r=advance(empty,{text:"2"});
  r=advance(r,{text:"3"});
+ assert.equal(r.stage,"nome");
+ assert.match(r.reply,/Como posso chamar/);
+ r=advance(r,{text:"Marina Vieira"});
+ assert.equal(r.stage,"bairro");
+ r=advance(r,{text:"Irajá, Rio de Janeiro"});
  assert.equal(r.stage,"venda_midia");
  assert.match(r.reply,/foto/i);assert.match(r.reply,/vídeo/i);
  r=advance(r,{text:"Tenho uma Brastemp"});
@@ -164,10 +170,8 @@ test("venda solicita foto e video imediatamente e so prossegue com os dois",()=>
  r=advance(r,{type:"image",text:""});
  assert.equal(r.stage,"venda_midia");assert.match(r.reply,/falta.*vídeo/i);
  r=advance(r,{type:"video",text:""});
- assert.equal(r.stage,"nome");
+ assert.equal(r.stage,"equipamento");
  assert.equal(r.data.fotos,1);assert.equal(r.data.videoRecebido,true);
- r=advance(r,{text:"Marina Vieira"});
- r=advance(r,{text:"Irajá, Rio de Janeiro"});
  r=advance(r,{text:"Geladeira Brastemp 400L, funciona, 4 anos"});
  assert.equal(r.stage,"venda_valor");
  r=advance(r,{text:"R$ 1.500,00"});
@@ -183,12 +187,16 @@ test("venda solicita foto e video imediatamente e so prossegue com os dois",()=>
  assert.equal(r.order.valorNegociavel,"Sim");
  assert.equal(r.order.videoRecebido,true);
 });
-test("venda aceita video antes da foto e ignora midias sem virar nome",()=>{
+
+test("venda aceita vídeo antes da foto depois da identificação",()=>{
  let r=advance(advance(empty,{text:"7"}),{text:"2"});
+ r=advance(r,{text:"Joana"});
+ r=advance(r,{text:"Méier, Rio de Janeiro"});
+ assert.equal(r.stage,"venda_midia");
  r=advance(r,{type:"video",text:""});
  assert.equal(r.stage,"venda_midia");assert.match(r.reply,/falta.*foto/i);
  r=advance(r,{type:"image",text:""});
- assert.equal(r.stage,"nome");assert.equal(r.data.videoRecebido,true);
+ assert.equal(r.stage,"equipamento");assert.equal(r.data.videoRecebido,true);
 });
 test("video recebido em outros fluxos nao e confundido com resposta textual",()=>{
  let r=advance(advance(empty,{text:"1"}),{text:"1"});
@@ -218,12 +226,13 @@ test("YCloud reconhece video do cliente comercial",()=>{
  assert.equal(result?.kind,"incoming");
 });
 
-test("venda exige valor pretendido e registra a negociabilidade sem confundir com orçamento do técnico",()=>{
+
+test("venda registra valor pretendido e negociabilidade após o material",()=>{
  let r=advance(advance(empty,{text:"2"}),{text:"3"});
- r=advance(r,{type:"video",text:""});
- r=advance(r,{type:"image",text:""});
  r=advance(r,{text:"Marcos"});
  r=advance(r,{text:"Penha, Rio de Janeiro"});
+ r=advance(r,{type:"video",text:""});
+ r=advance(r,{type:"image",text:""});
  r=advance(r,{text:"Lavadora 10 kg funcionando"});
  assert.equal(r.stage,"venda_valor");
  r=advance(r,{text:"valor 1200"});
@@ -237,25 +246,44 @@ test("venda exige valor pretendido e registra a negociabilidade sem confundir co
  assert.equal(r.order.valorPretendidoNumero,1200);
  assert.equal(r.order.valorNegociavel,"Não");
 });
-test("venda aceita preço a combinar e não prende o cliente sem valor definido",()=>{
+
+test("venda aceita preço a combinar",()=>{
  let r=advance(advance(empty,{text:"2"}),{text:"3"});
- r=advance(r,{type:"image",text:""});
- r=advance(r,{type:"video",text:""});
  r=advance(r,{text:"Rosa"});
  r=advance(r,{text:"Cascadura"});
+ r=advance(r,{type:"image",text:""});
+ r=advance(r,{type:"video",text:""});
  r=advance(r,{text:"Freezer Electrolux não gela"});
  r=advance(r,{text:"a combinar"});
  assert.equal(r.stage,"preferencia");
  assert.equal(r.data.valorPretendido,"A combinar");
  assert.equal(r.data.valorNegociavel,"A combinar");
 });
-test("pedido direto de venda pula submenu e preserva exigência de mídias",()=>{
- const r=advance(empty,{text:"Quero vender minha geladeira"});
- assert.equal(r.stage,"venda_midia");
- assert.match(r.reply,/foto/i);
- assert.match(r.reply,/vídeo/i);
-});
 
+test("pergunta direta sobre comprar geladeira recebe saudação identificação e próxima pergunta",()=>{
+ const r=advance(empty,{text:"Vc compra geladeira funcionando",receivedAt:"2026-11-23T17:19:00Z"});
+ assert.equal(r.stage,"nome");
+ assert.match(r.reply,/^Boa tarde! 👋/);
+ assert.match(r.reply,/assistente virtual da Leonardo Moreira Refrigeração/);
+ assert.match(r.reply,/avali/i);
+ assert.match(r.reply,/Como posso chamar você/);
+ const name=advance(r,{text:"Paulo",receivedAt:"2026-11-23T17:20:00Z"});
+ assert.equal(name.stage,"bairro");
+ assert.doesNotMatch(name.reply,/^(Bom dia|Boa tarde|Boa noite)!/);
+ const neighborhood=advance(name,{text:"Quintino, Rio de Janeiro"});
+ assert.equal(neighborhood.stage,"venda_midia");
+ assert.match(neighborhood.reply,/foto/i);assert.match(neighborhood.reply,/vídeo/i);
+});
+test("saudação varia com o horário do Rio e ocorre uma só vez",()=>{
+ for(const [when,greet] of [["2026-11-23T11:00:00Z","Bom dia"],["2026-11-23T17:00:00Z","Boa tarde"],["2026-11-23T23:00:00Z","Boa noite"]]){
+  const first=advance(empty,{text:"Olá",receivedAt:when});
+  assert.match(first.reply,new RegExp("^"+greet+"!"));
+  const second=advance(first,{text:"Gostaria de instalar um split",receivedAt:when});
+  assert.doesNotMatch(second.reply,/^(Bom dia|Boa tarde|Boa noite)!/);
+  const menu=advance(second,{text:"0",receivedAt:when});
+  assert.doesNotMatch(menu.reply,/^(Bom dia|Boa tarde|Boa noite)!/);
+ }
+});
 test("instalação citada depois de comprar, endereço fragmentado e horário complementar",()=>{
  let r=empty;
  const send=text=>r=advance(r,{text});
@@ -340,7 +368,7 @@ test("pergunta se a empresa compra inicia avaliação de venda em qualquer entra
  for(const text of ["Você compra máquina de lavar??","Vocês compram geladeira?","Venda de máquina de lavar","Vender"]){
   for(const stage of ["menu","assunto","eletro_escolha"]){
    const r=advance({stage,mode:"bot",data:{}},{text});
-   assert.equal(r.stage,"venda_midia",stage+": "+text);
+   assert.equal(r.stage,"nome",stage+": "+text);
    assert.equal(r.data.servico,"Venda de equipamento");
   }
  }
