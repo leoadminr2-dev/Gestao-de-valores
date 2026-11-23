@@ -7,9 +7,6 @@ export const MENU = [
   "*REFRIGERAÇÃO*",
   "🔧 Instalação • Manutenção • Higienização",
   "",
-  "Olá! 👋 Seja bem-vindo(a)!",
-  "Obrigado por entrar em contato com a *Leonardo Moreira Refrigeração*.",
-  "",
   "*Como podemos ajudar hoje?*",
   "",
   "1️⃣ *Ar-condicionado*",
@@ -39,15 +36,21 @@ const AIR_MENU = "❄️ *Ar-condicionado Split e de janela*\n\n1️⃣ *Instala
 const APPLIANCE_MENU = "🏠 *Geladeiras, freezers e máquinas de lavar*\n\n1️⃣ *Manutenção e consertos*\n\n2️⃣ *Comprar equipamento*\n\n3️⃣ *Vender equipamento*\n\nResponda com o número ou conte o problema.\nDigite *0* para voltar.";
 const SCHEDULE_MENU = "🗓️ *Agendamento e acompanhamento*\n\n1️⃣ *Solicitar atendimento online*\n\n2️⃣ *Consultar protocolo*\n\nAgendamentos só são confirmados após retorno de Leonardo.\nDigite *0* para voltar.";
 
+const SALE_MEDIA_REPLY = "📷 Para que Leonardo possa avaliar o equipamento, envie *1 foto* mostrando o estado geral e *1 vídeo curto* mostrando o funcionamento ou eventual defeito. Pode enviar aqui mesmo, em qualquer ordem.\n\nDepois seguimos com os detalhes da proposta. Para voltar ao menu, digite *0*.";
+const SALE_EXPLANATION = "♻️ Sim, trabalhamos com a avaliação de propostas de venda de geladeiras, freezers, ar-condicionado e máquinas de lavar, inclusive em funcionamento. Leonardo analisa o estado do equipamento antes de confirmar qualquer compra.";
+
 function human(stage, data) {
   return {stage, mode:"human", data, reply:HUMAN_REPLY};
 }
 function orderFlow(servico, previous={}, extra={}) {
   const data={...previous,...extra,servico,fotos:Number(previous.fotos || 0)};
   if(servico.startsWith("Venda")){
-    return {stage:"venda_midia",mode:"bot",data:{
-      ...data,fotos:0,videoRecebido:false,mediaItems:[]
-    },reply:"♻️ *Vamos avaliar o equipamento que deseja vender!*\n\n📷 Envie pelo menos *1 foto* do equipamento (de preferência mostrando o estado geral).\n🎥 Envie também *1 vídeo curto* mostrando seu funcionamento ou o defeito.\n\nMande os dois aqui nesta conversa, em qualquer ordem. Depois completamos o que faltar para Leonardo avaliar.\n\nPara voltar ao menu, digite *0*."};
+    const saleData={...data,fotos:0,videoRecebido:false,mediaItems:[],guided:false};
+    if(!saleData.cliente)
+      return {stage:"nome",mode:"bot",data:saleData,reply:SALE_EXPLANATION+"\n\nAntes de solicitar fotos, como posso chamar você?"};
+    if(!saleData.bairro)
+      return {stage:"bairro",mode:"bot",data:saleData,reply:SALE_EXPLANATION+"\n\nEm qual bairro e cidade fica o equipamento?"};
+    return {stage:"venda_midia",mode:"bot",data:saleData,reply:SALE_EXPLANATION+"\n\n"+SALE_MEDIA_REPLY};
   }
   if (serviceType(norm(servico)) && !servico.startsWith("Contrato") && data.tipoAtendimento!=="Empresarial") {
     return {stage:"nome",mode:"bot",data:{...data,guided:true},reply:welcome+"\n\n"+explainService(data.servico)+"\n\n"+nameQuestion};
@@ -236,7 +239,7 @@ function serviceAnswer(t, service) {
 function beginService(data,raw,service,greet) {
   const info={...data,guided:true,relato:raw,servico:service};
   const nextStage=!info.cliente?"nome":!info.bairro?"bairro_inicial":"necessidade";
-  const introduction=greet?(info.cliente?"Olá, "+info.cliente+"! Você está no atendimento automático da Leonardo Moreira Refrigeração.":welcome):"";
+  const introduction=""; // A abertura é centralizada em advance().
   const t=norm(raw);
   const fridge=service.startsWith("Manutenção") && /geladeira|refrigerador/.test(t) && /parou|nao gel|sem gel/.test(t);
   const windowWash=service.startsWith("Limpeza") && /janela/.test(t);
@@ -445,7 +448,7 @@ function guidedStep(stage,data,raw,t) {
   return next("revisao_guiada",guidedReview(data));
 }
 
-export function advance(session, incoming) {
+function advanceCore(session, incoming) {
   let stage=session?.stage||"menu",mode=session?.mode||"bot";
   const data={...(session?.data||{})};
   const raw=String(incoming?.text||"").trim().slice(0,1000),t=norm(raw);
@@ -614,6 +617,8 @@ export function advance(session, incoming) {
   if(stage==="bairro"){
     if(raw.length<2)return {stage,mode,data,reply:"Informe o bairro e a cidade, por favor."};
     data.bairro=raw.slice(0,150);
+    if(norm(data.servico).includes("venda") && !(Number(data.fotos||0)>0 && data.videoRecebido===true))
+      return {stage:"venda_midia",mode,data,reply:"Obrigado! Agora podemos fazer uma avaliação inicial.\n\n"+SALE_MEDIA_REPLY};
     return {stage:"equipamento",mode,data,reply:askEquipment(data)};
   }
   if(stage==="equipamento"){
@@ -637,8 +642,32 @@ export function advance(session, incoming) {
   return {stage:"menu",mode:"bot",data:{},reply:MENU};
 }
 
+function brazilHour(when=new Date()) {
+  const validDate=when instanceof Date && !Number.isNaN(when.getTime()) ? when : new Date();
+  return Number(new Intl.DateTimeFormat("en-GB",{timeZone:"America/Sao_Paulo",hour:"2-digit",hourCycle:"h23"}).format(validDate));
+}
+
+export function openingGreeting(when=new Date()) {
+  const hour=brazilHour(when);
+  const greeting=hour>=5&&hour<12?"Bom dia":hour>=12&&hour<18?"Boa tarde":"Boa noite";
+  return greeting+"! 👋\n\nSou a *assistente virtual da Leonardo Moreira Refrigeração*. Este é nosso atendimento automático, acompanhado pelo técnico Leonardo.";
+}
+
+export function advance(session,incoming) {
+  const result=advanceCore(session,incoming);
+  if(typeof result?.reply!=="string" || !result.reply.trim())return result;
+  const greeted=session?.data?.saudacaoEnviada===true;
+  const data={...(result.data||{}),saudacaoEnviada:true};
+  let reply=result.reply.replaceAll(welcome+"\n\n","").replaceAll(welcome,"");
+  if(!greeted){
+    const received=incoming?.receivedAt ? new Date(incoming.receivedAt) : new Date();
+    reply=openingGreeting(received)+"\n\n"+reply;
+  }
+  return {...result,data,reply};
+}
+
 export function closingMessage(protocol,when=new Date()) {
-  const hour=Number(new Intl.DateTimeFormat("en-GB",{timeZone:"America/Sao_Paulo",hour:"2-digit",hourCycle:"h23"}).format(when));
+  const hour=brazilHour(when);
   const greeting=hour>=5&&hour<12?"um ótimo dia":hour>=12&&hour<18?"uma ótima tarde":"uma ótima noite";
   return "✅ *Solicitação recebida!*\nProtocolo: *"+protocol+"*\n\nO técnico *Leonardo Moreira*, responsável pelo atendimento, entrará em contato em breve para avaliar o pedido. Leonardo confirmará os próximos passos por aqui.\n\nObrigado pelo contato e tenha "+greeting+"!";
 }
