@@ -47,7 +47,7 @@ function orderFlow(servico, previous={}, extra={}) {
   if(servico.startsWith("Venda")){
     const saleData={...data,fotos:0,videoRecebido:false,mediaItems:[],guided:false};
     if(!saleData.cliente)
-      return {stage:"nome",mode:"bot",data:saleData,reply:SALE_EXPLANATION+"\n\nAntes de solicitar fotos, como posso chamar você?"};
+      return {stage:"nome",mode:"bot",data:saleData,reply:SALE_EXPLANATION+"\n\nPara começar, gostaria de saber seu nome. Como posso chamar você?"};
     if(!saleData.bairro)
       return {stage:"bairro",mode:"bot",data:saleData,reply:SALE_EXPLANATION+"\n\nEm qual bairro e cidade fica o equipamento?"};
     return {stage:"venda_midia",mode:"bot",data:saleData,reply:SALE_EXPLANATION+"\n\n"+SALE_MEDIA_REPLY};
