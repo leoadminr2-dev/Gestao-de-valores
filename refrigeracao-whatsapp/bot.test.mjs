@@ -397,3 +397,54 @@ test("fachada e acesso difícil seguem para avaliação sem tarifa padrão",()=>
   assert.equal(second.data.avaliacaoPendente,true);assert.doesNotMatch(second.reply,/R\$/);
  }
 });
+
+
+test("atendimento aguarda identificação e não confunde Irajá com nome",()=>{
+ let r=advance(empty,{text:"Preciso de manutenção"});
+ assert.equal(r.stage,"nome");
+ assert.match(r.reply,/Como posso chamar você/);
+ assert.doesNotMatch(r.reply,/Em qual bairro será o atendimento/);
+ r=advance(r,{text:"Irajá"});
+ assert.equal(r.stage,"nome");
+ assert.equal(r.data.cliente,undefined);
+ assert.equal(r.data.bairro,"Irajá");
+ r=advance(r,{text:"Carlos"});
+ assert.equal(r.data.cliente,"Carlos");
+ assert.equal(r.stage,"necessidade");
+ assert.match(r.reply,/equipamento/i);
+ assert.doesNotMatch(r.reply,/R\$/);
+});
+
+test("pedido de orçamento genérico exige especificação, sem inventar serviço",()=>{
+ let r=advance(empty,{text:"Quero um orçamento"});
+ assert.equal(r.stage,"assunto");
+ assert.equal(r.data.servico,undefined);
+ r=advance(r,{text:"Sim"});
+ assert.equal(r.stage,"assunto");
+ assert.equal(r.data.servico,undefined);
+ assert.match(r.reply,/equipamento ou serviço/);
+ r=advance(r,{text:"Minha geladeira não está gelando"});
+ assert.equal(r.data.servico,"Manutenção e consertos");
+});
+
+test("bairro informado antes do nome não elimina fotos de venda",()=>{
+ let r=advance(empty,{text:"Quero vender minha geladeira"});
+ assert.equal(r.stage,"nome");
+ r=advance(r,{text:"Irajá"});
+ assert.equal(r.stage,"nome");
+ r=advance(r,{text:"Ana"});
+ assert.equal(r.stage,"venda_midia");
+ assert.match(r.reply,/foto/i);
+ assert.match(r.reply,/vídeo/i);
+});
+
+test("saudação e perguntas não chegam em sequência sem resposta",()=>{
+ const primeira=advance(empty,{text:"Preciso instalar um split",receivedAt:"2026-11-23T23:00:00Z"});
+ assert.match(primeira.reply,/Boa noite!/);
+ assert.equal(primeira.stage,"nome");
+ assert.match(primeira.reply,/Como posso chamar você/);
+ assert.doesNotMatch(primeira.reply,/Em qual bairro será o atendimento/);
+ const segunda=advance(primeira,{text:"Marina",receivedAt:"2026-11-23T23:00:05Z"});
+ assert.equal(segunda.stage,"bairro_inicial");
+ assert.doesNotMatch(segunda.reply,/Boa noite!/);
+});
