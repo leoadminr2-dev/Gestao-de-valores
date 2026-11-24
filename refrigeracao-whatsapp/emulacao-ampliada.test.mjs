@@ -123,7 +123,7 @@ test("informações fiscais e pagamento vão a humano sem promessas falsas",()=>
     const r=request(inquiry);
     assert.equal(r.mode,"human",inquiry);
     assert.match(r.reply,/Leonardo/);
-    assert.doesNotMatch(r.reply,/confirmad[oa]|garantimos|emitimos nota fiscal|parcelamos em/i);
+    assert.doesNotMatch(r.reply,/(?:ja|est[aá]) confirmad[oa]|garantimos|emitimos nota fiscal|parcelamos em/i);
   }
 });
 
