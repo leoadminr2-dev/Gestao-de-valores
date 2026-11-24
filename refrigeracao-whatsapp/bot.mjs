@@ -193,7 +193,7 @@ function serviceType(text) {
     return "Instalação de ar-condicionado";
   if (/limpeza|higieniz|lavagem|lavacao|limpar|lava(?:r|cao) (?:de |da |do )?(?:ar|condensadora|evaporadora)/.test(t))
     return "Limpeza profunda e higienização";
-  if (/manutencao|consert|reparo|defeito|reoperac|carga de gas|troca (?:de |do )?(?:compressor|motor|placa|rolamento|retentor)|nao (?:esta )?(?:gelando|refrigerando|esfriando|congelando|ligando|centrifugando|drenando|desligando)|nao (?:gela|refrigera|esfria|congela|liga|centrifuga|drena|desliga)|sem gelar|parou|vazando|pingando|barulho|ruido|gelo excessivo|congelando (?:demais|tudo)|so (?:o )?(?:agitador|freezer) funciona|disjuntor (?:cai|desarma)|desarmando o disjuntor|parte (?:de cima|de baixo) (?:nao funciona|nao gela)|erro [a-z]?\d+/.test(t))
+  if (/manutencao|consert|reparo|defeito|reoperac|carga de gas|troca (?:de |do )?(?:compressor|motor|placa|rolamento|retentor)|nao (?:esta )?(?:gelando|refrigerando|esfriando|congelando|ligando|centrifugando|drenando|desligando)|nao (?:gela|refrigera|esfria|congela|liga|centrifuga|drena|desliga|gira|sai agua)|sem gelar|parou|vazando|pingando|barulho|ruido|gelo excessivo|congelando (?:demais|tudo)|so (?:o )?(?:agitador|freezer) funciona|disjuntor (?:cai|desarma)|desarmando o disjuntor|desarma (?:o )?disjuntor|compressor nao (?:liga|parte)|suc[cç]ao congelando|tubo de suc[cç]ao (?:congelando|congela)|parte (?:de cima|de baixo) (?:nao funciona|nao gela)|erro [a-z]?\d+/.test(t))
     return "Manutenção e consertos";
   return "";
 }
@@ -491,8 +491,8 @@ function advanceCore(session, incoming) {
     return human(stage,data);
   if(/^(cancelar|desistir|cancela)$/.test(t))
     return {stage:"menu",mode:"bot",data:{},reply:"Tudo bem, sem problema. Não registrei nenhum novo pedido.\n\n"+MENU};
-  if(/cheiro de queimado|fumaca|faisca|choque eletrico|principio de incendio/.test(t))
-    return {stage,mode:"human",data,reply:"⚠️ Sinto muito por essa situação. Por segurança, pare de usar o equipamento e, se puder fazer isso sem risco, desligue a energia. Havendo fogo ou perigo imediato, acione a emergência. Não tente abrir ou reparar o aparelho. Vou deixar a conversa para Leonardo avaliar seu relato."};
+  if(/cheiro de queimado|fumaca|faisca|choque eletrico|principio de incendio|cheiro (?:forte )?de gas|vazamento de gas|r600a.*vazando/.test(t))
+    return {stage,mode:"human",data,reply:"⚠️ *Prioridade: segurança.* Pare de utilizar o equipamento. Se houver suspeita de vazamento de gás refrigerante, afaste fontes de chama e evite acionar interruptores próximos. Se for seguro, interrompa a alimentação elétrica; em caso de fumaça, fogo ou risco imediato, acione a emergência. Não tente abrir ou reparar o aparelho. Vou direcionar seu relato ao Leonardo."};
   const intake=["menu","encerrado","assunto","nome","bairro_inicial","necessidade","mercado","eletro_escolha"].includes(stage);
   const supplied=intake?contactDetails(raw):{};
   Object.assign(data,supplied);
@@ -500,6 +500,7 @@ function advanceCore(session, incoming) {
   const conditions=[];
   if (/parcel|cartao|forma[s]? de pagamento|aceita pix|pagar no pix/.test(t)) conditions.push("as condições de pagamento");
   if (/nota fiscal|recibo|emite nota|emissao de nota/.test(t)) conditions.push("a documentação fiscal");
+  if (/atende domingo|atende sabado|horario de atendimento/.test(t)) conditions.push("a disponibilidade de horário");
   if (/garantia/.test(t)) conditions.push("a garantia");
   if (/tem desconto|faz por menos|preco negociavel/.test(t)) conditions.push("a possibilidade de desconto");
   if (/prazo de entrega/.test(t)) conditions.push("o prazo de entrega");
@@ -535,7 +536,9 @@ function advanceCore(session, incoming) {
   if(incoming?.type==="document")return {stage,mode,data,reply:"📄 Recebi seu documento. Leonardo poderá conferir o arquivo na conversa. Você pode continuar descrevendo o atendimento por texto."};
   if(incoming?.type==="image" || incoming?.type==="video") {
     if(incoming.type==="image")data.fotos=Math.min(20,Number(data.fotos||0)+1);
-    return {stage,mode,data,reply:(incoming.type==="image"?"📷 Foto":"🎥 Vídeo")+" recebido! Leonardo poderá visualizar na conversa. "+(stage==="menu"?"Conte também o que está acontecendo com o equipamento.\n\n"+MENU:"Pode continuar com as informações que estávamos preenchendo.")};
+    const repeat={nome:nameQuestion,bairro_inicial:neighborhoodQuestion,necessidade:serviceQuestion,bairro:"Em qual bairro fica o atendimento?"};
+    const prompt=repeat[stage] || (stage==="menu"?"Conte também o que está acontecendo com o equipamento.":"Podemos continuar com as informações do atendimento.");
+    return {stage,mode,data,reply:(incoming.type==="image"?"📷 Foto":"🎥 Vídeo")+" recebido! Leonardo poderá visualizar na conversa. "+prompt};
   }
   if(stage==="venda_valor"){
     const aCombinar=/^(a combinar|a negociar|nao sei|sem valor definido|prefiro conversar)$/.test(t);
