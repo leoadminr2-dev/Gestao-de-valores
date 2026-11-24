@@ -179,7 +179,7 @@ const ack = /^(ok|obrigad[oa]|valeu|certo|beleza|blz|👍)[.! ]*$/;
 function serviceType(text) {
   if (/instala[cç]|instalar/.test(text)) return "Instalação de ar-condicionado";
   if (/limpeza|higieniz|lavagem|lavacao|limpar/.test(text)) return "Limpeza profunda e higienização";
-  if (/manutencao|consert|reparo|defeito|nao (gela|liga|centrifuga)|parou|vazando|pingando|barulho/.test(text)) return "Manutenção e consertos";
+  if (/manutencao|consert|reparo|defeito|nao (gela|liga|centrifuga)|nao (?:esta )?(?:gelando|ligando|centrifugando)|sem gelar|parou|vazando|pingando|barulho/.test(text)) return "Manutenção e consertos";
   return "";
 }
 function explainService(service) {
@@ -243,7 +243,7 @@ function beginService(data,raw,service,greet) {
   const nextStage=!info.cliente?"nome":!info.bairro?"bairro_inicial":"necessidade";
   const introduction=""; // A abertura é centralizada em advance().
   const t=norm(raw);
-  const fridge=service.startsWith("Manutenção") && /geladeira|refrigerador/.test(t) && /parou|nao gel|sem gel/.test(t);
+  const fridge=service.startsWith("Manutenção") && /geladeira|refrigerador/.test(t) && /parou|nao gel|sem gel|nao esta gelando/.test(t);
   const windowWash=service.startsWith("Limpeza") && /janela/.test(t);
   const upstairs=service.startsWith("Instalação") && elevated(t);
   if (fridge || windowWash || upstairs) {
