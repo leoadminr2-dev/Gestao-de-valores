@@ -186,14 +186,14 @@ function serviceType(text) {
   if (/\b(ventilador(?:es)?(?: de teto)?)\b/.test(t) && /instalac|instalar|montar|colocar/.test(t))
     return "Instalação de ventilador de teto";
   if (/\b(eletrica|eletrico|220\s*v?|circuito|disjuntor|quadro)\b/.test(t) &&
-      /instalac|instalar|puxar|passar fio|preparar ponto|adequac/.test(t) &&
+      /instalac|instalar|puxar|passar fio|preparar ponto|adequac|fazer (?:a )?(?:parte )?eletrica/.test(t) &&
       /ar[ -]?condicionado|split|220|quarto|circuito/.test(t))
     return "Instalação elétrica para ar-condicionado";
   if (/instalac|instalar|montagem de (?:split|ar[ -]?condicionado)/.test(t))
     return "Instalação de ar-condicionado";
   if (/limpeza|higieniz|lavagem|lavacao|limpar|lava(?:r|cao) (?:de |da |do )?(?:ar|condensadora|evaporadora)/.test(t))
     return "Limpeza profunda e higienização";
-  if (/manutencao|consert|reparo|defeito|reoperac|carga de gas|troca (?:de |do )?(?:compressor|motor|placa|rolamento|retentor)|nao (?:esta )?(?:gelando|refrigerando|esfriando|congelando|ligando|centrifugando|drenando|desligando)|nao (?:gela|refrigera|esfria|congela|liga|centrifuga|drena|desliga|gira|sai agua)|sem gelar|parou|vazando|pingando|barulho|ruido|gelo excessivo|congelando (?:demais|tudo)|so (?:o )?(?:agitador|freezer) funciona|disjuntor (?:cai|desarma)|desarmando o disjuntor|desarma (?:o )?disjuntor|compressor nao (?:liga|parte)|suc[cç]ao congelando|tubo de suc[cç]ao (?:congelando|congela)|parte (?:de cima|de baixo) (?:nao funciona|nao gela)|erro [a-z]?\d+/.test(t))
+  if (/manutencao|consert|reparo|defeito|reoperac|carga de gas|troca (?:de |do )?(?:compressor|motor|placa|rolamento|retentor)|nao (?:esta )?(?:gelando|refrigerando|esfriando|congelando|ligando|centrifugando|drenando|desligando)|nao (?:gela|refrigera|esfria|congela|liga|centrifuga|drena|desliga|gira|sai agua)|sem gelar|parou|vazando|pingando|barulho|ruido|gelo excessivo|congelando (?:demais|tudo)|so (?:o )?(?:agitador|freezer) funciona|disjuntor (?:cai|desarma)|desarmando o disjuntor|desarma (?:o )?disjuntor|compressor nao (?:liga|parte)|suc[cç]ao congelando|tubo de suc[cç]ao (?:congelando|congela)|so ventila|so congela|(?:em cima|em baixo) nao (?:gela|funciona)|parte (?:de cima|de baixo) (?:nao funciona|nao gela)|erro [a-z]?\d+/.test(t))
     return "Manutenção e consertos";
   return "";
 }
