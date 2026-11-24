@@ -79,10 +79,11 @@ function route(raw, previous={}) {
   return null;
 }
 function marketIntent(t) {
-  // “Vocês compram?” significa que o cliente quer vender para a empresa.
-  if (/\b(voc[eê]s?|vc|vcs)\s+(?:tambem\s+)?compra(?:m)?\b/.test(t)) return "Venda de equipamento";
+  // "Você compra?" = cliente quer vender; "vocês vendem?" = cliente quer comprar.
+  if (/\b(voce|voces|vc|vcs)\s+(?:tambem\s+)?compra(?:m)?\b/.test(t)) return "Venda de equipamento";
   if (/\b(venda|vender|vendo)\b/.test(t) && !/compra e venda/.test(t)) return "Venda de equipamento";
-  if (/^(compra|comprar)[.!? ]*$/.test(t) || /\b(quero|pretendo|gostaria|preciso)\s+comprar\b/.test(t)) return "Compra de equipamento";
+  if (/\b(voce|voces|vc|vcs)\s+(?:tambem\s+)?vende(?:m)?\b/.test(t)) return "Compra de equipamento";
+  if (/^(compra|comprar)[.!? ]*$/.test(t) || /\b(quero|pretendo|gostaria|preciso|queria)\s+comprar\b/.test(t)) return "Compra de equipamento";
   return "";
 }
 function initialIntent(t, previous={}) {
@@ -104,13 +105,13 @@ function initialIntent(t, previous={}) {
   if(t==="2")return {stage:"eletro_escolha",mode:"bot",data:{...previous},reply:APPLIANCE_MENU};
   if(/residencial|minha casa|apartamento/.test(t))
     return {stage:"residencial",mode:"bot",data:{...previous,tipoAtendimento:"Residencial"},reply:RESIDENTIAL_MENU};
-  if(/instalac|instalar/.test(t))return orderFlow("Instalação de ar-condicionado",previous);
-  if(/(manutencao|consert|reparo|defeito|nao gela|nao liga|nao centrifuga|parou de funcionar|vazamento)/.test(t))
+  if(/instalac|instalar|montar ventilador|puxar (?:o )?220/.test(t))return orderFlow(serviceType(t)||"Instalação de ar-condicionado",previous);
+  if(serviceType(t)==="Manutenção e consertos" || /(manutencao|consert|reparo|defeito|nao gela|nao liga|nao centrifuga|parou de funcionar|vazamento)/.test(t))
     return orderFlow("Manutenção e consertos",previous);
   if(/limpeza|higieniz/.test(t))return orderFlow("Limpeza profunda e higienização",previous);
   if(/ar condicionado|split|modelo de janela/.test(t))
     return {stage:"ar_escolha",mode:"bot",data:{...previous},reply:AIR_MENU};
-  if(/geladeira|freezer|maquina de lavar|lavadora/.test(t))
+  if(/geladeira|freezer|maquina de lavar|lavadora|lava e seca|frigobar|cervejeira|adega|bebedouro|expositor|balcao refrigerado|camara fria/.test(t))
     return {stage:"eletro_escolha",mode:"bot",data:{...previous},reply:APPLIANCE_MENU};
   return null;
 }
@@ -130,13 +131,17 @@ export function price(text, selected="") {
   return "Os valores dependem do serviço e das condições do equipamento. Diga se procura instalação, limpeza, manutenção ou contrato para eu orientar melhor.";
 }
 function askEquipment(data) {
-  const t=norm(data.servico);
-  if(t.includes("contrato"))return "Quantos equipamentos precisam de atendimento, de quais tipos e com qual frequência de limpeza ou manutenção? Informe também os principais problemas, se houver.";
-  if(t.includes("compra"))return "Qual equipamento deseja comprar (geladeira, freezer, ar-condicionado ou máquina de lavar)? Diga a capacidade, voltagem e faixa de orçamento desejadas, se souber.";
-  if(t.includes("venda"))return "Qual equipamento deseja vender? Informe *tipo, marca, modelo, idade aproximada, estado de conservação, defeito (se houver) e se já passou por conserto*.";
-  if(t.includes("instalacao"))return "Seu ar-condicionado é *Split ou de janela*? Informe os BTUs e, se souber, a voltagem. Já há ponto elétrico, suporte e tubulação? Se puder, envie foto do local.";
-  if(t.includes("limpeza"))return "O aparelho é *Split ou de janela*? Quantos precisam de limpeza? Há mau cheiro, sujeira intensa, gotejamento ou dificuldade de acesso? Foto é bem-vinda.";
-  return "Qual equipamento precisa de manutenção e o que está acontecendo? Se souber, informe a marca e o modelo. Foto ou vídeo são opcionais.";
+  const t=norm(data.servico), history=norm(data.relato);
+  if(t.includes("contrato"))return "Quantos equipamentos sua empresa precisa incluir na manutenção preventiva?";
+  if(t.includes("compra"))return "Qual equipamento você procura comprar? Pode dizer o tipo e a capacidade, se souber.";
+  if(t.includes("venda"))return "Qual é o equipamento que deseja vender? Informe marca, modelo e estado de funcionamento, se souber.";
+  if(t.includes("ventilador"))return "Quantos ventiladores de teto você precisa instalar?";
+  if(t.includes("eletrica"))return "O circuito de 220 V já existe ou será necessário puxar um circuito do quadro?";
+  if(t.includes("instalacao"))return "O ar-condicionado que será instalado é split ou de janela? Se souber, diga os BTUs.";
+  if(t.includes("limpeza") && /cervejeira|frigobar|adega|bebedouro|expositor|balcao|camara fria|freezer|geladeira/.test(history))
+    return "Quantos equipamentos desse tipo precisam de limpeza?";
+  if(t.includes("limpeza"))return "O ar-condicionado é split ou de janela?";
+  return "Qual equipamento precisa de manutenção e qual é o sintoma principal? Marca e modelo ajudam, se souber.";
 }
 function askPreference(data) {
   if(norm(data.servico).includes("venda"))return "Qual período é melhor para Leonardo entrar em contato? O equipamento está disponível para retirada no bairro informado?";
@@ -177,21 +182,34 @@ const serviceQuestion = "O que você precisa fazer e em qual aparelho?";
 const timing = /^(hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo|de manha|manha|tarde|noite|a combinar|sem preferencia|\d{1,2}\/\d{1,2})\b/;
 const ack = /^(ok|obrigad[oa]|valeu|certo|beleza|blz|👍)[.! ]*$/;
 function serviceType(text) {
-  if (/instala[cç]|instalar/.test(text)) return "Instalação de ar-condicionado";
-  if (/limpeza|higieniz|lavagem|lavacao|limpar/.test(text)) return "Limpeza profunda e higienização";
-  if (/manutencao|consert|reparo|defeito|nao (gela|liga|centrifuga)|nao (?:esta )?(?:gelando|ligando|centrifugando)|sem gelar|parou|vazando|pingando|barulho/.test(text)) return "Manutenção e consertos";
+  const t=norm(text);
+  if (/\b(ventilador(?:es)?(?: de teto)?)\b/.test(t) && /instalac|instalar|montar|colocar/.test(t))
+    return "Instalação de ventilador de teto";
+  if (/\b(eletrica|eletrico|220\s*v?|circuito|disjuntor|quadro)\b/.test(t) &&
+      /instalac|instalar|puxar|passar fio|preparar ponto|adequac/.test(t) &&
+      /ar[ -]?condicionado|split|220|quarto|circuito/.test(t))
+    return "Instalação elétrica para ar-condicionado";
+  if (/instalac|instalar|montagem de (?:split|ar[ -]?condicionado)/.test(t))
+    return "Instalação de ar-condicionado";
+  if (/limpeza|higieniz|lavagem|lavacao|limpar|lava(?:r|cao) (?:de |da |do )?(?:ar|condensadora|evaporadora)/.test(t))
+    return "Limpeza profunda e higienização";
+  if (/manutencao|consert|reparo|defeito|reoperac|carga de gas|troca (?:de |do )?(?:compressor|motor|placa|rolamento|retentor)|nao (?:esta )?(?:gelando|refrigerando|esfriando|congelando|ligando|centrifugando|drenando|desligando)|nao (?:gela|refrigera|esfria|congela|liga|centrifuga|drena|desliga)|sem gelar|parou|vazando|pingando|barulho|ruido|gelo excessivo|congelando (?:demais|tudo)|so (?:o )?(?:agitador|freezer) funciona|disjuntor (?:cai|desarma)|desarmando o disjuntor|parte (?:de cima|de baixo) (?:nao funciona|nao gela)|erro [a-z]?\d+/.test(t))
+    return "Manutenção e consertos";
   return "";
 }
 function explainService(service) {
+  if (service==="Instalação de ventilador de teto")
+    return "Conferimos o ponto elétrico, a fixação e as condições do local antes de definir o serviço. A instalação será executada conforme a segurança do ambiente.";
+  if (service==="Instalação elétrica para ar-condicionado")
+    return "Avaliamos o quadro, a alimentação elétrica, o trajeto e as proteções exigidas pelo aparelho antes de propor a adequação. O orçamento elétrico é separado do de instalação do ar.";
   if (service?.startsWith("Instalação"))
-    return "Antes de orçar, conferimos o modelo, o ponto elétrico e o acesso às unidades. Na instalação do split, fazemos o teste de estanqueidade, o vácuo e o teste de funcionamento.";
+    return "Antes de orçar, conferimos o aparelho, a parte elétrica e o acesso. Na instalação de split, realizamos teste de estanqueidade, vácuo e teste de funcionamento.";
   if (service?.startsWith("Limpeza"))
-    return "Na higienização, verificamos o estado do aparelho, limpamos os componentes e testamos o funcionamento após a montagem. O orçamento considera o tipo de aparelho e o acesso.";
+    return "A higienização é definida conforme o tipo de equipamento, os componentes acessíveis e a condição do local. Depois conferimos o funcionamento.";
   if (service?.startsWith("Manutenção"))
-    return "Primeiro entendemos o sintoma. Na visita, Leonardo verifica a causa e explica o reparo, as peças e a mão de obra para você decidir antes da execução.";
-  return "Aqui na Leonardo Moreira Refrigeração, primeiro entendemos o que você precisa. Depois explicamos como o serviço será feito, o que está incluído e quanto fica, para você decidir.";
+    return "Primeiro entendemos o defeito. Leonardo avalia a causa e apresenta as peças, a mão de obra e o valor para aprovação antes do reparo.";
+  return "Entendemos sua necessidade e explicamos o procedimento, os materiais e o valor antes da execução.";
 }
-
 function contactDetails(raw) {
   const fields={};
   const intro=raw.match(/(?:^|[.,!;]\s*|\b(?:oi|olá)[ ,]+)(?:sou (?:o |a )?|me chamo |meu nome é )([\p{L}'’-]+(?: [\p{L}'’-]+){0,4}?)(?=,|[.!;]|\s+(?:do bairro|do|da|de|moro|e quero|e preciso)\s|$)/iu);
@@ -226,6 +244,16 @@ function nextDetail(data) {
 
 function serviceAnswer(t, service) {
   const answers=[];
+  if (/nota fiscal|recibo|emite nota|emissao de nota/.test(t))
+    answers.push("Sobre nota fiscal ou recibo, Leonardo confirma a forma de emissão antes do fechamento. Não vou prometer um documento sem essa confirmação.");
+  if (/garantia/.test(t))
+    answers.push("As condições e o prazo de garantia são informados conforme o serviço e registrados no orçamento. Leonardo confirma os detalhes antes da aprovação.");
+  if (/parcel|cartao|forma[s]? de pagamento|aceita pix|pagar no pix/.test(t))
+    answers.push("As formas de pagamento são confirmadas com Leonardo antes do serviço, sem compromisso até sua aprovação.");
+  if (/atendem? (?:em |no |na )|area de atendimento|bairros? que atende/.test(t))
+    answers.push("Podemos consultar a disponibilidade para o seu bairro antes de confirmar uma visita.");
+  if (/horario de atendimento|atende domingo|atende sabado|tem horario/.test(t))
+    answers.push("Os horários dependem da agenda. Leonardo confirma dia e período antes de qualquer agendamento.");
   if (service?.startsWith("Instalação") && /materia(is|l)|tubulacao|suporte/.test(t))
     answers.push("Na instalação padrão, o cliente fornece o aparelho e os materiais. Leonardo confere o que será necessário para o seu local antes de fechar o orçamento.");
   if (service?.startsWith("Instalação") && /eletric|220\s*v|tomada|disjuntor/.test(t))
@@ -266,6 +294,7 @@ function quote(data) {
   const detail=norm(data.equipamento);
   if (data.servico.startsWith("Manutenção"))
     return "*Visita técnica*\nLeonardo avalia o aparelho e identifica a causa do problema.\n*Valor da visita · R$ 120,00* O valor da visita é abatido se você aprovar o conserto. Peças e mão de obra do reparo serão orçadas após o diagnóstico.";
+  if (data.servico==="Instalação de ventilador de teto" || data.servico==="Instalação elétrica para ar-condicionado") return null;
   if (data.servico.startsWith("Instalação") && /fachada|andaime|rapel|precis[ao] (?:puxar|instalar) (?:o )?220/.test(detail)) return null;
   if (data.servico.startsWith("Instalação") && /split/.test(detail))
     return "❄️ *Instalação padrão de split*\nInclui fixação, interligação, teste de estanqueidade, vácuo e teste de funcionamento. O cliente fornece o aparelho e os materiais. Acesso especial e adequação elétrica exigem avaliação separada.\n*Mão de obra estimada · R$ 650,00 por aparelho*";
@@ -393,9 +422,9 @@ function guidedStep(stage,data,raw,t) {
       return next(stage,"Você precisa de instalação, limpeza, conserto, compra ou venda? Pode explicar com suas palavras.");
     }
     data.relato=history;
-    if(!/janela|split|geladeira|freezer|lavadora|maquina|ar[ -]condicionado|refrigerador/.test(norm(history)))
+    if(!/janela|split|geladeira|freezer|lavadora|maquina|ar[ -]condicionado|refrigerador|cervejeira|frigobar|adega|bebedouro|expositor|balcao|camara fria|ventilador|condensadora|evaporadora/.test(norm(history)))
       return next(stage,askEquipment(data));
-    if(!data.servico.startsWith("Manutenção") && !/janela|split/.test(norm(history)))
+    if((data.servico==="Instalação de ar-condicionado" || (data.servico.startsWith("Limpeza") && /ar[ -]condicionado|climatizador/.test(norm(history)))) && !/janela|split/.test(norm(history)))
       return next(stage,"O ar-condicionado é split ou de janela? Se souber, informe também a capacidade em BTUs.");
     if(data.servico.startsWith("Manutenção") && !/nao |parou|vaz|barulho|ping|queb|gelando pouco|cheiro|ruido|falh|deslig|esquent|trav|trepid|erro|congel/.test(norm(history)) && !data.perguntouDefeito){
       data.perguntouDefeito=true;
@@ -469,7 +498,8 @@ function advanceCore(session, incoming) {
   Object.assign(data,supplied);
   const topic=data.servico || serviceType(t);
   const conditions=[];
-  if (/parcel|cartao|forma[s]? de pagamento/.test(t)) conditions.push("as condições de pagamento");
+  if (/parcel|cartao|forma[s]? de pagamento|aceita pix|pagar no pix/.test(t)) conditions.push("as condições de pagamento");
+  if (/nota fiscal|recibo|emite nota|emissao de nota/.test(t)) conditions.push("a documentação fiscal");
   if (/garantia/.test(t)) conditions.push("a garantia");
   if (/tem desconto|faz por menos|preco negociavel/.test(t)) conditions.push("a possibilidade de desconto");
   if (/prazo de entrega/.test(t)) conditions.push("o prazo de entrega");
@@ -501,6 +531,8 @@ function advanceCore(session, incoming) {
     }
     return {stage,mode,data,reply:"📷 Foto recebida! Para continuar, falta enviar *um vídeo* mostrando o aparelho."};
   }
+  if(incoming?.type==="audio")return {stage,mode:"human",data:{...data,midiaRecebida:"audio"},reply:"🎙️ Recebi seu áudio. Para não interpretar seu relato incorretamente, vou encaminhá-lo ao Leonardo, que poderá ouvir e dar continuidade por aqui. Para voltar ao atendimento automático, digite MENU."};
+  if(incoming?.type==="document")return {stage,mode,data,reply:"📄 Recebi seu documento. Leonardo poderá conferir o arquivo na conversa. Você pode continuar descrevendo o atendimento por texto."};
   if(incoming?.type==="image" || incoming?.type==="video") {
     if(incoming.type==="image")data.fotos=Math.min(20,Number(data.fotos||0)+1);
     return {stage,mode,data,reply:(incoming.type==="image"?"📷 Foto":"🎥 Vídeo")+" recebido! Leonardo poderá visualizar na conversa. "+(stage==="menu"?"Conte também o que está acontecendo com o equipamento.\n\n"+MENU:"Pode continuar com as informações que estávamos preenchendo.")};
@@ -533,7 +565,7 @@ function advanceCore(session, incoming) {
   }
   if(/(plataforma|acessar o site|acessar plataforma|link do site|formulario online|agendar online)/.test(t))
     return {stage,mode,data,reply:"🌐 Claro! Você pode acessar nossa plataforma por aqui:\n"+PLATFORM_URL+"\n\nLá é possível enviar uma solicitação de atendimento e obter um protocolo. Se preferir, podemos continuar pelo WhatsApp. A visita depende de confirmação."};
-  const statedTopic=Boolean(serviceType(t)) || /refrigeracao|ar[ -]condicionado|geladeira|freezer|lavadora|maquina de lavar|split|ar de janela/.test(t);
+  const statedTopic=Boolean(serviceType(t)) || /refrigeracao|ar[ -]condicionado|geladeira|freezer|lavadora|maquina de lavar|split|ar de janela|lava e seca|cervejeira|frigobar|adega|bebedouro|expositor|balcao refrigerado|camara fria|ventilador de teto|condensadora|evaporadora/.test(t);
   if(stage==="outro_assunto"){
     if(!isCommercialIntent(raw))return {stage,mode,data,reply:null};
     stage="menu";
