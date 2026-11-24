@@ -622,7 +622,10 @@ function advanceCore(session, incoming) {
     if(raw.length<3||/^\d+$/.test(raw))return {stage,mode,data,reply:"Como posso chamar você? Informe seu nome, por favor."};
     if(bairroConhecido(raw))return {stage,mode,data:{...data,bairro:raw.slice(0,120)},reply:"Obrigado! Anotei *"+raw+"* como bairro. Agora, como posso chamar você?"};
     data.cliente=raw.slice(0,120);
-    if(data.bairro)return {stage:"equipamento",mode,data,reply:askEquipment(data)};
+    if(data.bairro){
+      if(norm(data.servico).includes("venda") && !(Number(data.fotos||0)>0 && data.videoRecebido===true))return {stage:"venda_midia",mode,data,reply:SALE_MEDIA_REPLY};
+      return {stage:"equipamento",mode,data,reply:askEquipment(data)};
+    }
     return {stage:"bairro",mode,data,reply:"Prazer, "+data.cliente.split(" ")[0]+"! 😊 Em qual bairro e cidade fica o atendimento?"};
   }
   if(stage==="bairro"){
@@ -661,7 +664,7 @@ function brazilHour(when=new Date()) {
 export function openingGreeting(when=new Date()) {
   const hour=brazilHour(when);
   const greeting=hour>=5&&hour<12?"Bom dia":hour>=12&&hour<18?"Boa tarde":"Boa noite";
-  return greeting+"! 👋\n\nSou a *assistente virtual da Leonardo Moreira Refrigeração*. Nosso atendimento é automático e acompanhado pelo técnico Leonardo.";
+  return greeting+"! 👋\n\nSou a *assistente virtual da Leonardo Moreira Refrigeração*. Este é nosso atendimento automático, acompanhado pelo técnico Leonardo.";
 }
 
 export function advance(session,incoming) {
