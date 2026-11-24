@@ -83,7 +83,7 @@ function marketIntent(t) {
   if (/\b(voce|voces|vc|vcs)\s+(?:tambem\s+)?compra(?:m)?\b/.test(t)) return "Venda de equipamento";
   if (/\b(venda|vender|vendo)\b/.test(t) && !/compra e venda/.test(t)) return "Venda de equipamento";
   if (/\b(voce|voces|vc|vcs)\s+(?:tambem\s+)?vende(?:m)?\b/.test(t)) return "Compra de equipamento";
-  if (/^(compra|comprar)[.!? ]*$/.test(t) || /\b(quero|pretendo|gostaria|preciso|queria)\s+comprar\b/.test(t)) return "Compra de equipamento";
+  if (/^(compra|comprar)[.!? ]*$/.test(t) || /\b(quero|pretendo|gostaria|preciso|queria)\s+(?:de\s+)?comprar\b/.test(t)) return "Compra de equipamento";
   return "";
 }
 function initialIntent(t, previous={}) {
@@ -227,6 +227,8 @@ function elevated(text) {
 }
 function nextDetail(data) {
   const history=norm(data.relato);
+  if (data.servico==="Instalação elétrica para ar-condicionado" || data.servico==="Instalação de ventilador de teto")
+    return askEquipment(data);
   if (data.servico?.startsWith("Instalação") && elevated(history) && !/varanda|sacada|fachada/.test(history))
     return "Como o serviço é em andar elevado, precisamos conferir o acesso. A unidade externa vai ficar na varanda ou na fachada do prédio?";
   if (data.servico?.startsWith("Manutenção") && /geladeira|freezer/.test(history) && /parou|nao gel|sem gel/.test(history))
@@ -487,7 +489,7 @@ function advanceCore(session, incoming) {
   const raw=String(incoming?.text||"").trim().slice(0,1000),t=norm(raw);
   if(/^(menu|inicio|reiniciar|0)$/.test(t))return {stage:"menu",mode:"bot",data:{},reply:MENU};
   if(mode==="human" || data.handoffPending === true)return {stage,mode,data,reply:null};
-  if((!["endereco_final","ajustar_endereco","bairro_inicial","endereco"].includes(stage) && /^(5|9)$/.test(t)) || /^(humano|atendente|responsavel|falar com leonardo|falar com responsavel|pessoa de verdade)$/.test(t))
+  if((!["endereco_final","ajustar_endereco","bairro_inicial","endereco"].includes(stage) && /^(5|9)$/.test(t)) || /^(humano|atendente|responsavel|(?:quero|preciso|gostaria de|posso|poderia)?\s*falar com (?:o )?(?:leonardo|responsavel|tecnico|atendente)|pessoa de verdade|atendimento humano)$/.test(t))
     return human(stage,data);
   if(/^(cancelar|desistir|cancela)$/.test(t))
     return {stage:"menu",mode:"bot",data:{},reply:"Tudo bem, sem problema. Não registrei nenhum novo pedido.\n\n"+MENU};
