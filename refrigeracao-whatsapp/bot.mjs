@@ -197,6 +197,14 @@ function serviceType(text) {
     return "Manutenção e consertos";
   return "";
 }
+function cleaningProcedure(detail="") {
+  const t=norm(detail);
+  if (/janela|split|ar[ -]?condicionado/.test(t)) {
+    const units=/janela/.test(t)?"higienização das serpentinas evaporadora e condensadora":"higienização da evaporadora e da condensadora";
+    return "Nossa higienização é profunda, não se resume à limpeza dos filtros. Realizamos a desmontagem técnica dos componentes laváveis, a lavagem individual das peças, "+units+", limpeza dos filtros, turbina ou ventilador, bandeja e drenagem, com proteção dos componentes elétricos e eletrônicos. Depois remontamos o equipamento e testamos o funcionamento. Esse cuidado ajuda a recuperar a circulação de ar, a eficiência da refrigeração e a reduzir odores causados pela sujeira.";
+  }
+  return "Nossa limpeza é técnica e completa, com desmontagem dos componentes laváveis, higienização individual das peças e dos componentes adequados ao tipo de equipamento, proteção da parte elétrica, remontagem e teste de funcionamento. O procedimento é definido conforme o aparelho e as condições de acesso.";
+}
 function explainService(service) {
   if (service==="Instalação de ventilador de teto")
     return "Conferimos o ponto elétrico, a fixação e as condições do local antes de definir o serviço. A instalação será executada conforme a segurança do ambiente.";
@@ -205,7 +213,7 @@ function explainService(service) {
   if (service?.startsWith("Instalação"))
     return "Antes de orçar, conferimos o aparelho, a parte elétrica e o acesso. Na instalação de split, realizamos teste de estanqueidade, vácuo e teste de funcionamento.";
   if (service?.startsWith("Limpeza"))
-    return "A higienização é definida conforme o tipo de equipamento, os componentes acessíveis e a condição do local. Depois conferimos o funcionamento.";
+    return cleaningProcedure();
   if (service?.startsWith("Manutenção"))
     return "Primeiro entendemos o defeito. Leonardo avalia a causa e apresenta as peças, a mão de obra e o valor para aprovação antes do reparo.";
   return "Entendemos sua necessidade e explicamos o procedimento, os materiais e o valor antes da execução.";
@@ -283,7 +291,8 @@ function beginService(data,raw,service,greet) {
       ? "Há quanto tempo você percebeu essa mudança?" : "O freezer também parou de gelar ou o problema está só na parte de baixo?";
     if(windowWash) prompt=/acesso (simples|facil)|facil acesso|terreo/.test(t)
       ? "É uma unidade ou são vários aparelhos?" : "O aparelho fica em local de fácil acesso para a limpeza?";
-    const intro=fridge?"Na visita, Leonardo verifica a causa antes de indicar peças ou reparos.":windowWash?"Na higienização, limpamos filtros, serpentina e bandeja e testamos o aparelho após a montagem.":"";
+    const intro=fridge?"Na visita, Leonardo verifica a causa antes de indicar peças ou reparos.":windowWash?cleaningProcedure(t):"";
+    if(windowWash)info.higienizacaoExplicada=true;
     return {stage:"necessidade",mode:"bot",data:info,reply:[introduction,intro,prompt].filter(Boolean).join("\n\n")};
   }
   const accessFirst=nextStage==="necessidade" && service.startsWith("Instalação") && elevated(t);
@@ -303,7 +312,7 @@ function quote(data) {
   if (data.servico.startsWith("Limpeza") && /acesso dificil|dificil acesso|fachada|andaime|rapel|nao (?:e |tem )?(?:de )?facil acesso/.test(detail)) return null;
   if (data.servico.startsWith("Limpeza") && /janela|split/.test(detail)) {
     const unit=/janela/.test(detail)?"R$ 250,00":/\b9\s*(mil|k|[., ]?000)\b/.test(detail)?"R$ 280,00":"";
-    if (unit) return "❄️ *Higienização de ar-condicionado*\nInclui limpeza dos filtros, serpentina e bandeja, remontagem e teste de funcionamento.\n*Valor · "+unit+" por aparelho*";
+    if (unit) return "❄️ *Higienização profunda de ar-condicionado*\n"+(data.higienizacaoExplicada?"Desmontagem técnica, lavagem individual das peças, higienização das unidades evaporadora e condensadora, limpeza da drenagem, remontagem e testes, conforme explicado acima.":cleaningProcedure(detail))+"\n\n*Investimento · "+unit+" por aparelho*";
   }
   return null;
 }
@@ -442,7 +451,7 @@ function guidedStep(stage,data,raw,t) {
     const message=estimate
       ? estimate+"\n\nEsse orçamento atende ao que você procura?"
       : "*Orçamento sob avaliação*\nLeonardo vai conferir os detalhes e informar mão de obra, materiais e total. Quer seguir com a solicitação de avaliação?";
-    return next("aceite_orcamento",message+"\nResponda SIM para seguir, NÃO para encerrar ou envie sua dúvida.");
+    return next("aceite_orcamento",message+"\nSe quiser agendar ou tiver alguma dúvida sobre o procedimento, pode me dizer por aqui. O responsável técnico também pode auxiliar.");
   }
   if(stage==="aceite_orcamento"){
     if(accepted || correctedNumber && /^((por mim )?pode (marcar|agendar)|sim|aceito)[,. ]+(mas )?(o )?numero/.test(t)){
@@ -455,7 +464,7 @@ function guidedStep(stage,data,raw,t) {
       return next("revisao_guiada",guidedReview(data));
     }
     if(/^(nao|agora nao|nao quero|nao obrigado|nao obrigada)[.! ]*$/.test(t))
-      return {stage:"encerrado",mode:"bot",data:{},reply:"Tudo bem! Obrigado pelo contato. Se precisar, estamos por aqui."};
+      return {stage:"encerrado",mode:"bot",data:{},reply:"Sem problemas! Agradecemos pela oportunidade de apresentar nosso trabalho. Se precisar futuramente, nossa equipe estará à disposição. Leonardo Moreira Refrigeração."};
     if(timing.test(t)){
       data.preferencia=[data.preferencia,raw].filter(Boolean).join(" · ").slice(-150);
       return next(stage,"Anotei sua preferência: "+data.preferencia+". Quer seguir? Responda SIM ou NÃO.");
