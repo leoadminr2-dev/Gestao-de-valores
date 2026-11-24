@@ -24,9 +24,9 @@ export function isCommercialIntent(text) {
   if (!value) return false;
   if (EXACT.has(value)) return true;
 
-  const equipment = /\b(refrigeracao|geladeiras?|freezers?|ar condicionado|ar de janela|splits?|maquinas? de lavar|lava e seca|lavadoras?|evaporadora|condensadora|cervejeiras?|frigobares?|adegas?|bebedouros?|expositores?|balcao refrigerado|camara fria|ventiladores? de teto)\b/.test(value);
+  const equipment = /\b(refrigeracao|geladeiras?|freezers?|ar condicionado|ar de janela|splits?|maquinas? de lavar|lava e seca|lavadoras?|evaporadora|condensadora|compressor(?:es)?|cervejeiras?|frigobares?|adegas?|bebedouros?|expositores?|balcao refrigerado|camara fria|ventiladores? de teto)\b/.test(value);
   const service = /\b(manutencao|orcamento|conserto|consertar|reparo|reoperacao|carga de gas|troca de compressor|troca de motor|instalacao|instalar|limpeza|limpar|lavar|lavagem|lavacao|higienizacao|higienizar|visita tecnica|assistencia tecnica|contrato preventivo|contrato de manutencao)\b/.test(value);
-  const fault = /\b(nao gela|nao esfria|nao refrigera|nao congela|nao liga|nao centrifuga|nao esta gelando|nao esta refrigerando|nao esta centrifugando|parou|quebrou|queimou|vazamento|vazando|pingando|sem gelar|gelando pouco|barulho|defeito|problema|congelando demais|cheiro de queimado|desarma o disjuntor|compressor nao liga|parte de cima nao gela|suc[cç]ao congelando)\b/.test(value);
+  const fault = /\b(nao gela|nao esfria|nao refrigera|nao congela|nao liga|nao centrifuga|nao esta gelando|nao esta refrigerando|nao esta centrifugando|parou|quebrou|queimou|vazamento|vazando|pingando|sem gelar|gelando pouco|barulho|defeito|problema|congelando demais|cheiro de queimado|desarma o disjuntor|compressor nao liga|parte de cima nao gela|suc[cç]ao congelando|tubo de suc[cç]ao congelando|so ventila|so congela)\b/.test(value);
   const seeking = /\b(preciso|quero|queria|gostaria|pode|voce faz|voces fazem|faz|atende|solicitar|agendar|marcar|quanto custa|quanto fica|quanto cobra|quanto cobram|quanto (?:vc|vcs|voce|voces) (?:me )?cobram?|qto (?:vc|voce) (?:me )?cobram?|qual valor|qual preco|valor|preco|cotacao|compra|compram|venda|comprar|vender|vendem|vendo)\b/.test(value);
   const company = /\b(contrato de limpeza|contrato de manutencao|atendimento empresarial|servico para empresa|servico para empresas)\b/.test(value);
 
