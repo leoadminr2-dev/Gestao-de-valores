@@ -1,5 +1,10 @@
 import crypto from "node:crypto";
-export const ABSENCE_MESSAGE="Olá! Tudo bem? Aqui é o atendimento automático da Leonardo Moreira Refrigeração. No momento, estou realizando um atendimento técnico e não consigo responder imediatamente. Pode deixar sua mensagem normalmente. Assim que possível, retornarei pessoalmente. Obrigado pela compreensão!";
+export const ABSENCE_MESSAGE="❄️ *LEONARDO MOREIRA REFRIGERAÇÃO*\n\n🔧 No momento, estamos realizando um atendimento técnico e não conseguimos responder imediatamente.\n\n💬 Fique à vontade para deixar sua mensagem. Assim que possível, retornarei pessoalmente para atendê-lo.\n\n🤝 Agradecemos pela compreensão e pela confiança em nosso trabalho!\n\n*Qualidade, responsabilidade e compromisso com você!* 🛠️";
+export function absenceMessage(now=new Date()){
+ const hour=Number(new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",hour:"2-digit",hourCycle:"h23"}).format(now));
+ const greeting=hour>=5&&hour<12?"☀️ Bom dia!":hour>=12&&hour<18?"🌤️ Boa tarde!":"🌙 Boa noite!";
+ return greeting+" Olá, tudo bem?\n\n"+ABSENCE_MESSAGE;
+}
 export function validDuration(hours){return Number.isInteger(hours)&&hours>=1&&hours<=12;}
 export function createTechnicalMode(pool){
  let ready;
@@ -49,7 +54,7 @@ export function createTechnicalMode(pool){
     if(isProtected(phone))throw Error("PRIVATE_CONTACT");
     const current=await status();
     if(!current.active||current.run_id!==run_id)throw Error("MODE_ENDED");
-    await send(phone,ABSENCE_MESSAGE);
+    await send(phone,absenceMessage());
     await pool.query("UPDATE wa_technical_waiting SET sent_at=now() WHERE run_id=$1 AND phone=$2",[run_id,phone]);
    }catch(e){await pool.query("UPDATE wa_technical_waiting SET error=$3 WHERE run_id=$1 AND phone=$2",[run_id,phone,String(e?.message||"SEND_FAILED").slice(0,100)]);}
   }
