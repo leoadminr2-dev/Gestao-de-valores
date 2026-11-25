@@ -710,19 +710,25 @@ function brazilHour(when=new Date()) {
 export function openingGreeting(when=new Date()) {
   const hour=brazilHour(when);
   const greeting=hour>=5&&hour<12?"Bom dia":hour>=12&&hour<18?"Boa tarde":"Boa noite";
-  return greeting+"! 👋\n\nSou a *assistente virtual da Leonardo Moreira Refrigeração*. Este é nosso atendimento automático, acompanhado pelo técnico Leonardo.";
+  return greeting+"! 👋\n\nMeu nome é *Romeu*, sou o *assistente virtual da Leonardo Moreira Refrigeração*. Este é nosso atendimento automático, acompanhado pelo técnico Leonardo.";
 }
 
 export function advance(session,incoming) {
   let result;
   const t=norm(incoming?.text);
   const stage=session?.stage||"menu";
+  const plain=t.replace(/[!?.,;:]+/g," ").replace(/\s+/g," ").trim();
+  const deferred=/^(?:depois|mais tarde|outra hora|agora nao|nao agora|deixa (?:para|pra) depois|falamos depois|te chamo depois|vou chamar depois|vou ver|vou pensar|vou confirmar|(?:vai|vou|vamos) reagendar(?: irmao| amigo)?|a gente (?:ve|fala) depois|combinado|ate mais|boa noite obrigado)$/;
+  if((session?.mode||"bot")==="bot" && (!incoming?.type || incoming.type==="text") && ["menu","tecnico_nome","nome","assunto","encerrado","identificacao_aceite","ajustar_nome"].includes(stage) && (deferred.test(plain)||ack.test(plain))){
+    return {stage,mode:"bot",data:{...(session?.data||{})},reply:null};
+  }
   if(incoming?.technicalMode && (session?.mode||"bot")==="bot" && !session?.data?.handoffPending && ["menu","tecnico_nome"].includes(stage) && (!incoming?.type || incoming.type==="text") && !isCommercialIntent(t) && !marketIntent(t) && !/^(menu|inicio|reiniciar|0|[1-9]|cancelar|desistir|cancela|humano|atendente|responsavel)$/.test(t) && !/cheiro de queimado|fumaca|faisca|choque eletrico|incendio|vazamento de gas|cheiro (?:forte )?de gas|falar com|nota fiscal|desconto|garantia|parcel|cartao/.test(t)){
     const data={...(session?.data||{})};
     const name=String(incoming?.text||"").trim();
     Object.assign(data,contactDetails(name));
     const greeting=/^(?:oi|ola|bom dia|boa tarde|boa noite|tudo bem|oi tudo bem|ola tudo bem)[!,.? ]*$/i.test(t);
     if(stage==="tecnico_nome" && !data.cliente && !greeting && !ack.test(t) && /^[\p{L}][\p{L}'’ -]{1,79}$/u.test(name) && !/^(sim|nao|outro assunto|pessoal)$/.test(t))data.cliente=name;
+    if(stage==="tecnico_nome" && !data.cliente && session?.data?.saudacaoEnviada===true)return {stage,mode:"bot",data,reply:null};
     result=data.cliente?{stage:"assunto",mode:"bot",data,reply:"Prazer, "+data.cliente.split(" ")[0]+"! 😊 Como posso ajudar você hoje?"}:{stage:"tecnico_nome",mode:"bot",data,reply:"😊 Como posso chamar você? Pode também me contar o que precisa hoje."};
   }else{
     result=advanceCore(stage==="tecnico_nome"?{...session,stage:"menu"}:session,incoming);
@@ -736,6 +742,21 @@ export function advance(session,incoming) {
     reply=openingGreeting(received)+(incoming?.technicalMode?"\n\n🔧 Nosso responsável técnico está realizando um atendimento neste momento. Vou dar prosseguimento ao seu atendimento por aqui, esclarecer dúvidas, organizar orçamentos e registrar solicitações. 🤝":"")+"\n\n"+reply;
   }
   return {...result,data,reply};
+}
+
+// A conversa humana nunca é reiniciada pelo modo técnico.
+export const HUMAN_NOTICE_PREFIX="🤖 Aqui é o Romeu, assistente virtual da Leonardo Moreira Refrigeração.";
+export function humanConversationNotice(session,incoming,{active=false,runId="",manualAt=null,now=Date.now()}={}){
+  const data={...(session?.data||{})};
+  const stage=session?.stage||"menu";
+  const t=norm(incoming?.text).replace(/[!?.,;:]+/g," ").trim();
+  const quiet=ack.test(t)||/^(?:depois|mais tarde|combinado|ate mais|tchau|obrigado pela atencao|obrigada pela atencao|agora nao)$/.test(t);
+  const at=manualAt?new Date(manualAt).getTime():NaN;
+  const key=Number.isFinite(at)?"manual:"+new Date(at).toISOString():"run:"+runId;
+  if(!active||quiet||(Number.isFinite(at)&&now-at<600000)||data.romeuNoticeKey===key)
+    return {stage,mode:"human",data,reply:null};
+  data.romeuNoticeKey=key;
+  return {stage,mode:"human",data,reply:HUMAN_NOTICE_PREFIX+"\n\n🔧 Leonardo está realizando um atendimento técnico agora. Recebi sua mensagem e, assim que estiver disponível, ele dará continuidade à conversa de vocês. Obrigado pela compreensão! 🤝"};
 }
 
 export function closingMessage(protocol,when=new Date()) {

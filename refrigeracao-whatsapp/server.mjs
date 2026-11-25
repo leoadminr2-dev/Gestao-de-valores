@@ -1,7 +1,7 @@
 import http from "node:http";
 import crypto from "node:crypto";
 import pg from "pg";
-import {advance,closingMessage} from "./bot.mjs";
+import {advance,closingMessage,humanConversationNotice,HUMAN_NOTICE_PREFIX} from "./bot.mjs";
 import {shouldHandleMessage,isProtectedPhone,shouldPauseForManualReply} from "./selective.mjs";
 import {appReplyPhones} from "./coexistence.mjs";
 import {verifyYCloudSignature,relevantYCloudEvent} from "./ycloud.mjs";
@@ -41,8 +41,10 @@ const protectedPhone=phone=>isProtectedPhone(phone,WHATSAPP_PRIVATE_PHONES);
 function eligible(phone,incoming,session,active){
  if(protectedPhone(phone))return false;
  const normal=shouldHandleMessage({phone,messageType:incoming.type,text:incoming.text,session,protectedPhones:WHATSAPP_PRIVATE_PHONES});
+ if(session?.stage==="outro_assunto")return false;
+ if(session?.mode==="human" || session?.data?.romeuManualAt)return Boolean(active);
  if(normal)return true;
- return Boolean(active && session?.mode!=="human" && session?.stage!=="outro_assunto" && ["text","image","video","interactive","button","audio","document"].includes(incoming.type));
+ return Boolean(active && session?.stage!=="outro_assunto" && ["text","image","video","interactive","button","audio","document"].includes(incoming.type));
 }
 
 function json(res,status,data){
@@ -75,7 +77,8 @@ function msgText(m){
 async function handleInbound(message){
  const phone=safePhone(message?.from),messageId=String(message?.id||"");
  if(!phone||!messageId||messageId.length>255||protectedPhone(phone))return;
- const active=(await technical.status()).active;
+ const technicalStatus=await technical.status();
+ const active=technicalStatus.active;
  const type=message?.type,raw=type==="image"?message.image:type==="video"?message.video:null;
  const media=message?.media||(raw?{provider:"meta",type,id:String(raw.id||""),mimeType:String(raw.mime_type||"")}:null);
  const incoming={text:msgText(message),type,media};
@@ -95,14 +98,20 @@ async function handleInbound(message){
    await db.query("COMMIT");
    return; // Conversa privada: não gerar resposta, pedido ou conteúdo na fila.
   }
-  const legacyPrivate=current.mode==="human"&&current.data?.commercialActivated!==true;
-  const move=advance({stage:legacyPrivate?"menu":current.stage,mode:legacyPrivate?"bot":current.mode,data:{...(legacyPrivate?{}:current.data),commercialActivated:true}},{...incoming,technicalMode:active});
+  // Inclui intervenções registradas em ativações anteriores do modo técnico.
+  const oldManual=active?await db.query("SELECT MAX(responded_at) AS at FROM wa_technical_waiting WHERE phone=$1",[phone]):{rows:[]};
+  const manualDates=[current.data?.romeuManualAt,oldManual.rows[0]?.at].filter(Boolean).map(x=>new Date(x)).filter(x=>Number.isFinite(x.getTime()));
+  const manualAt=manualDates.length?new Date(Math.max(...manualDates.map(x=>x.getTime()))).toISOString():null;
+  const humanOwned=current.mode==="human"||Boolean(manualAt);
+  const state={stage:current.stage,mode:humanOwned?"human":current.mode,data:{...current.data,...(manualAt?{romeuManualAt:manualAt}:{})}};
+  const move=humanOwned?humanConversationNotice(state,incoming,{active,runId:technicalStatus.run_id,manualAt}):advance({...state,data:{...state.data,commercialActivated:true}},{...incoming,technicalMode:active});
+
   if(move.mode==="bot"&&!/^(cancelar|desistir|cancela)$/.test(String(incoming.text||"").trim().toLowerCase())){
    move.data={...move.data,commercialActivated:true};
   }
   // A confirmação da transferência humana deve chegar antes de pausar o robô.
   // Usamos JSONB como estado temporário, preservando o CHECK bot/human do banco.
-  const enteringHuman=current.mode==="bot"&&move.mode==="human"&&Boolean(move.reply);
+  const enteringHuman=!humanOwned&&current.mode==="bot"&&move.mode==="human"&&Boolean(move.reply);
   const cancellingHandoff=Boolean(current.data?.handoffPending)&&move.mode==="bot"&&!move.data?.handoffPending;
   const persistedMode=enteringHuman?"bot":move.mode;
   const persistedData=enteringHuman?{...move.data,handoffPending:true}:move.data;
@@ -133,10 +142,10 @@ async function handleManualReply(phone,at=new Date()){
  const db=await pool.connect();
  try{
   await db.query("BEGIN");
-  const existing=await db.query("SELECT mode,data,last_message_at FROM wa_sessions WHERE phone=$1 FOR UPDATE",[phone]);
-  if(active || shouldPauseForManualReply(existing.rows[0])){
-   if(!active)await db.query("UPDATE wa_sessions SET mode='human',updated_at=now() WHERE phone=$1",[phone]);
-   if(active)await db.query("UPDATE wa_provider_events SET processed_at=now(),lease_until=NULL,last_error='HUMAN_TAKEOVER' WHERE processed_at IS NULL AND event_type='incoming' AND payload->>'phone'=$1 AND created_at<=$2::timestamptz",[phone,at]);
+  // Registrar somente telefone e horário, mesmo antes do modo técnico.
+  const ownership=await db.query("INSERT INTO wa_sessions(phone,mode,data) VALUES($1,'human',jsonb_build_object('romeuManualAt',$2::text)) ON CONFLICT(phone) DO UPDATE SET mode='human',data=(COALESCE(wa_sessions.data,'{}'::jsonb)-'handoffPending'-'romeuNoticeKey')||jsonb_build_object('romeuManualAt',$2::text),updated_at=now() WHERE wa_sessions.data->>'romeuManualAt' IS NULL OR (wa_sessions.data->>'romeuManualAt')::timestamptz<$2::timestamptz RETURNING phone",[phone,new Date(at).toISOString()]);
+  if(ownership.rowCount){
+   await db.query("UPDATE wa_provider_events SET processed_at=now(),lease_until=NULL,last_error='HUMAN_TAKEOVER' WHERE processed_at IS NULL AND event_type='incoming' AND payload->>'phone'=$1 AND created_at<=$2::timestamptz",[phone,at]);
    await db.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE phone=$1 AND sent_at IS NULL AND cancelled_at IS NULL",[phone]);
   }
   await db.query("COMMIT");
@@ -154,10 +163,6 @@ async function receiveYCloudEvent(event){
   const previous=await pool.query("SELECT stage,mode,data,last_message_at FROM wa_sessions WHERE phone=$1",[event.phone]);
   const controlledTest=YCLOUD_TEST_MODE&&event.messageType==="text"&&String(event.text||"").trim().toUpperCase()==="TESTE LMR";
   if(!controlledTest&&!eligible(event.phone,{type:event.messageType,text:event.text},previous.rows[0]||null,active))return false;
- }else if(event.kind==="manual_reply"){
-  const active=(await technical.status()).active;
-  const previous=await pool.query("SELECT mode,data,last_message_at FROM wa_sessions WHERE phone=$1",[event.phone]);
-  if(!active&&!shouldPauseForManualReply(previous.rows[0]))return false;
  }
  if(isProtectedPhone(event.phone,WHATSAPP_PRIVATE_PHONES))return false;
  const saved=await pool.query("INSERT INTO wa_provider_events(event_id,event_type,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING event_id",[event.id,event.kind,JSON.stringify(event)]);
@@ -283,7 +288,8 @@ async function sendOutbox(){
    continue;
   }
   const last=await pool.query("SELECT last_message_at,mode,data FROM wa_sessions WHERE phone=$1",[row.phone]);
-  if(last.rows[0]?.mode==="human" || await technical.paused(row.phone) || (await pool.query("SELECT 1 FROM wa_provider_events WHERE processed_at IS NULL AND event_type='manual_reply' AND payload->>'phone'=$1 LIMIT 1",[row.phone])).rowCount){
+  const humanNotice=row.message.startsWith(HUMAN_NOTICE_PREFIX);
+  if((last.rows[0]?.mode==="human" && (!humanNotice || !(await technical.status()).active)) || await technical.paused(row.phone) || (await pool.query("SELECT 1 FROM wa_provider_events WHERE processed_at IS NULL AND event_type='manual_reply' AND payload->>'phone'=$1 LIMIT 1",[row.phone])).rowCount){
    await pool.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE id=$1",[row.id]);
    continue;
   }
@@ -296,7 +302,7 @@ async function sendOutbox(){
    await pool.query("UPDATE wa_outbound SET sent_at=now(),lease_until=NULL,last_error=NULL WHERE id=$1",[row.id]);
    await technical.markAssisted(row.phone).catch(()=>{});
    // A partir daqui, só Leonardo ou o comando MENU retoma a conversa.
-   if(last.rows[0]?.data?.handoffPending===true){
+   if(!humanNotice && last.rows[0]?.data?.handoffPending===true){
     await pool.query("UPDATE wa_sessions SET mode='human',data=data-'handoffPending',updated_at=now() WHERE phone=$1 AND mode='bot' AND data->>'handoffPending'='true'",[row.phone]);
    }
   }catch(err){

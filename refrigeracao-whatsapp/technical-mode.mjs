@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-export const ABSENCE_MESSAGE="❄️ *LEONARDO MOREIRA REFRIGERAÇÃO*\n\n🔧 No momento, estamos realizando um atendimento técnico e não conseguimos responder imediatamente.\n\n🤖 Sou o assistente virtual e vou dar prosseguimento ao seu atendimento. Como posso chamar você e como posso ajudar?\n\n🤝 Agradecemos pela compreensão e pela confiança em nosso trabalho!\n\n*Qualidade, responsabilidade e compromisso com você!* 🛠️";
+export const ABSENCE_MESSAGE="❄️ *LEONARDO MOREIRA REFRIGERAÇÃO*\n\n🔧 No momento, estamos realizando um atendimento técnico e não conseguimos responder imediatamente.\n\n🤖 Aqui é o Romeu, assistente virtual. Leonardo dará continuidade à conversa assim que estiver disponível.\n\n🤝 Agradecemos pela compreensão e pela confiança em nosso trabalho!\n\n*Qualidade, responsabilidade e compromisso com você!* 🛠️";
 export function absenceMessage(now=new Date()){
  const hour=Number(new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",hour:"2-digit",hourCycle:"h23"}).format(now));
  const greeting=hour>=5&&hour<12?"☀️ Bom dia!":hour>=12&&hour<18?"🌤️ Boa tarde!":"🌙 Boa noite!";
@@ -36,7 +36,7 @@ export function createTechnicalMode(pool){
  async function capture(phone){
   await ensure();
   // One row per contact per activation. No message content is retained.
-  const r=await pool.query("INSERT INTO wa_technical_waiting(run_id,phone) SELECT run_id,$1 FROM wa_technical_mode WHERE id=1 AND active_until>now() ON CONFLICT(run_id,phone) DO UPDATE SET last_at=now() RETURNING phone",[phone]);
+  const r=await pool.query("INSERT INTO wa_technical_waiting(run_id,phone,responded_at) SELECT run_id,$1,GREATEST((SELECT MAX(responded_at) FROM wa_technical_waiting WHERE phone=$1),(SELECT (data->>'romeuManualAt')::timestamptz FROM wa_sessions WHERE phone=$1)) FROM wa_technical_mode WHERE id=1 AND active_until>now() ON CONFLICT(run_id,phone) DO UPDATE SET last_at=now(),responded_at=GREATEST(wa_technical_waiting.responded_at,EXCLUDED.responded_at) RETURNING phone",[phone]);
   return r.rowCount>0;
  }
  async function manual(phone){

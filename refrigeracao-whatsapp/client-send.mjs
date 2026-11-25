@@ -61,7 +61,7 @@ export function createCustomerReplyService(pool,options={}){
     // Owner initiated an explicit follow-up: preserve human control.
     // A failure to pause the bot must not misreport a provider-accepted message as undelivered.
     try{
-     await pool.query("INSERT INTO wa_sessions(phone,mode) VALUES($1,'human') ON CONFLICT(phone) DO UPDATE SET mode='human',updated_at=now()",[phone]);
+     await pool.query("INSERT INTO wa_sessions(phone,mode,data) VALUES($1,'human',jsonb_build_object('romeuManualAt',now()::text)) ON CONFLICT(phone) DO UPDATE SET mode='human',data=(COALESCE(wa_sessions.data,'{}'::jsonb)-'handoffPending'-'romeuNoticeKey')||jsonb_build_object('romeuManualAt',now()::text),updated_at=now()",[phone]);
      await pool.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE phone=$1 AND sent_at IS NULL AND cancelled_at IS NULL",[phone]);
     }catch(e){console.error("FALHA_TRANSFERENCIA_HUMANA",String(e?.code||"ERR").slice(0,48));}
     return {status:"accepted",repeated:false};

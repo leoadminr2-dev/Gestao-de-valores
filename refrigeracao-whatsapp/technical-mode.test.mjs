@@ -39,7 +39,7 @@ test("manual reply cancelling a claimed message prevents sending",async()=>{
  assert.equal(checked,true);
 });
 
-import {advance} from "./bot.mjs";
+import {advance,humanConversationNotice} from "./bot.mjs";
 test("modo tecnico segue atendimento de venda da captura de tela",()=>{
  const a=advance({stage:"menu",mode:"bot",data:{}},{text:"https://facebook.com/marketplace/item/123",technicalMode:true});
  assert.match(a.reply,/realizando um atendimento/);
@@ -67,4 +67,41 @@ test("pausa manual usa instante original do evento e não reinicia em retry",asy
  assert.deepEqual(calls.at(-1).params,["5521999999999",at]);
  await m.paused("5521999999999");
  assert.match(calls.at(-1).sql,/interval '10 minutes'/);
+});
+
+test("Romeu não transforma adiamento em nome nem duplica a apresentação",()=>{
+ const a=advance({stage:"menu",mode:"bot",data:{}},{text:"Vai reagendar, irmão",technicalMode:true});
+ assert.equal(a.reply,null);
+ const b=advance({stage:"menu",mode:"bot",data:{}},{text:"Boa tarde",technicalMode:true});
+ assert.match(b.reply,/Romeu/);
+ for(const text of ["Boa tarde","Depois","Mais tarde","Ok"]){
+  const r=advance(b,{text,technicalMode:true});
+  assert.equal(r.reply,null,text);
+  assert.equal(r.data.cliente,undefined,text);
+ }
+ assert.equal(advance(b,{text:"Maria",technicalMode:true}).data.cliente,"Maria");
+});
+test("Romeu respeita conversa humana, aguarda dez minutos e avisa uma vez sem reiniciar",()=>{
+ const at="2026-11-25T15:00:00Z",now=Date.parse(at);
+ const state={stage:"aceite_orcamento",mode:"human",data:{cliente:"Maria",servico:"Instalação",valor:650}};
+ const opts={active:true,runId:"r",manualAt:at};
+ const msg={text:"Pode ser amanhã?"};
+ assert.equal(humanConversationNotice(state,msg,{...opts,now:now+599999}).reply,null);
+ const r=humanConversationNotice(state,msg,{...opts,now:now+600000});
+ assert.match(r.reply,/Romeu/);
+ assert.match(r.reply,/continuidade/);
+ assert.equal(r.mode,"human");
+ assert.equal(r.stage,state.stage);
+ assert.equal(r.data.valor,650);
+ assert.equal(r.order,undefined);
+ assert.equal(humanConversationNotice(r,msg,{...opts,now:now+700000}).reply,null);
+ assert.equal(humanConversationNotice(state,msg,{...opts,active:false,now:now+700000}).reply,null);
+ assert.equal(humanConversationNotice(state,{text:"Depois"},{...opts,now:now+700000}).reply,null);
+});
+test("conversa humana anterior à ativação permanece humana",()=>{
+ const r=humanConversationNotice({stage:"menu",mode:"human",data:{}},{text:"Qual o valor?"},{active:true,runId:"novo"});
+ assert.match(r.reply,/Leonardo/);
+ assert.equal(r.stage,"menu");
+ assert.equal(r.mode,"human");
+ assert.equal(humanConversationNotice(r,{text:"E aí?"},{active:true,runId:"novo"}).reply,null);
 });
