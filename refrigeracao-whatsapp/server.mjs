@@ -27,7 +27,15 @@ const PORT=Number(process.env.PORT||3000);
 const pool=new pg.Pool({connectionString:DB_URL,max:4,idleTimeoutMillis:10000,connectionTimeoutMillis:10000});
 const metaReady=Boolean(APP_SECRET&&VERIFY_TOKEN&&ACCESS_TOKEN&&PHONE_NUMBER_ID);
 const ycloudReady=Boolean(YCLOUD_WEBHOOK_SECRET&&YCLOUD_API_KEY&&YCLOUD_SENDER_NUMBER&&YCLOUD_AUTOREPLY_ENABLED);
-let processing=false;
+let processing=false,rerun=false,technicalTimer=null;
+function scheduleTechnical(due){
+ if(technicalTimer)clearTimeout(technicalTimer);
+ technicalTimer=null;
+ if(!due)return;
+ const delay=Math.max(500,new Date(due).getTime()-Date.now()+100);
+ technicalTimer=setTimeout(()=>{technicalTimer=null;void tick();},delay);
+ technicalTimer.unref();
+}
 const technical=createTechnicalMode(pool);
 const protectedPhone=phone=>isProtectedPhone(phone,WHATSAPP_PRIVATE_PHONES);
 
@@ -110,8 +118,8 @@ async function handleInbound(message){
  }finally{db.release();}
  // The durable outbound queue is drained by the provider event worker/timer.
 }
-async function handleManualReply(phone){
- if(!protectedPhone(phone))await technical.manual(phone);
+async function handleManualReply(phone,technicalRecorded=false){
+ if(!technicalRecorded&&!protectedPhone(phone))await technical.manual(phone);
  // A human reply from the Business App pauses bot responses for this customer.
  // Never interpret the echo as a new inbound order or send an automatic reply.
  const db=await pool.connect();
@@ -166,7 +174,7 @@ async function processYCloudEvents(){
      }
     }
    }
-   if(event.kind==="manual_reply"){await handleManualReply(event.phone);}
+   if(event.kind==="manual_reply"){await handleManualReply(event.phone,true);}
    else if(event.kind==="incoming"){
     await handleInbound({from:event.phone,id:"ycloud-"+event.messageId,type:event.messageType,text:{body:event.text||""},media:event.media||null});
    }
@@ -287,11 +295,11 @@ async function sendOutbox(){
  }
 }
 async function tick(){
- if(processing)return;
+ if(processing){rerun=true;return;}
  processing=true;
- try{await processYCloudEvents();await technical.drain(sendMessage,protectedPhone);await syncOrders();await sendOutbox();}
+ try{await processYCloudEvents();await technical.drain(sendMessage,protectedPhone);scheduleTechnical(await technical.nextDue());await syncOrders();await sendOutbox();}
  catch(e){console.error("FALHA_FILA",String(e?.code||e?.message||"ERR").slice(0,100));}
- finally{processing=false;}
+ finally{processing=false;if(rerun){rerun=false;setImmediate(()=>{void tick()});}}
 }
 const dashboard=createDashboard(pool,{technical});
 const server=http.createServer(async(req,res)=>{

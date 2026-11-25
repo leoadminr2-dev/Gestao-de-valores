@@ -453,13 +453,13 @@ function renderTechnical(data){
  el("technicalToggle").textContent=technicalActive?"Finalizar atendimento técnico":"Iniciar atendimento técnico";
  el("technicalToggle").disabled=technicalBusy;
  el("technicalHours").disabled=technicalActive||technicalBusy;
- const waiting=(data.waiting||[]).filter(x=>!x.responded_at);
+ const waiting=(data.waiting||[]).filter(x=>!x.responded_at||new Date(x.last_at)>new Date(x.responded_at));
  text("technicalCount",waiting.length+" contato(s) aguardando retorno — último atendimento");
  el("technicalWaiting").replaceChildren(...waiting.map(row=>{
   const li=document.createElement("li");
   const a=document.createElement("a");
   a.href="https://wa.me/"+encodeURIComponent(row.phone);a.target="_blank";a.rel="noopener noreferrer";a.textContent=row.phone;
-  li.append(a,document.createTextNode(" · "+dateText(row.last_at)+" · "+(row.sent_at?"Avisado":row.error?"Falha no aviso":row.attempted_at?"Envio não confirmado":"Aguardando aviso")));
+  li.append(a,document.createTextNode(" · "+dateText(row.last_at)+" · "+(row.sent_at?"Avisado":row.error?"Falha no aviso":row.attempted_at?"Envio não confirmado":row.responded_at&&Date.now()-new Date(row.responded_at).getTime()<600000?"Pausa manual de 10 minutos":"Aguardando aviso")));
   return li;
  }));
 }

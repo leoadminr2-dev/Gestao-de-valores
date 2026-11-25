@@ -41,23 +41,33 @@ export function createTechnicalMode(pool){
  }
  async function manual(phone){
   await ensure();
-  await pool.query("UPDATE wa_technical_waiting SET responded_at=now() WHERE phone=$1 AND run_id=(SELECT run_id FROM wa_technical_mode WHERE id=1) AND responded_at IS NULL",[phone]);
+  // Every manual reply restarts the per-contact clock, even before the first incoming message.
+  const r=await pool.query("INSERT INTO wa_technical_waiting(run_id,phone,responded_at) SELECT run_id,$1,now() FROM wa_technical_mode WHERE id=1 AND active_until>now() ON CONFLICT(run_id,phone) DO UPDATE SET responded_at=now(),attempted_at=NULL,sent_at=NULL,error=NULL",[phone]);
+  if(!r.rowCount)await pool.query("UPDATE wa_technical_waiting SET responded_at=now() WHERE phone=$1 AND run_id=(SELECT run_id FROM wa_technical_mode WHERE id=1)",[phone]);
+ }
+ async function nextDue(){
+  await ensure();
+  const r=await pool.query("SELECT MIN(CASE WHEN q.responded_at IS NULL THEN now() ELSE q.responded_at+interval '10 minutes' END) AS due FROM wa_technical_waiting q JOIN wa_technical_mode m ON m.run_id=q.run_id AND m.active_until>now() WHERE q.attempted_at IS NULL AND (q.responded_at IS NULL OR q.last_at>q.responded_at)");
+  return r.rows[0]?.due||null;
  }
  async function drain(send,isProtected){
   await ensure();
   for(let i=0;i<20;i++){
    // Claim before sending: uncertain network failures never cause repeated messages.
-   const r=await pool.query("UPDATE wa_technical_waiting w SET attempted_at=now() WHERE (w.run_id,w.phone)=(SELECT q.run_id,q.phone FROM wa_technical_waiting q JOIN wa_technical_mode m ON m.run_id=q.run_id AND m.active_until>now() WHERE q.attempted_at IS NULL AND q.responded_at IS NULL ORDER BY q.first_at LIMIT 1 FOR UPDATE OF q SKIP LOCKED) RETURNING w.run_id,w.phone");
+   const r=await pool.query("UPDATE wa_technical_waiting w SET attempted_at=now() WHERE (w.run_id,w.phone)=(SELECT q.run_id,q.phone FROM wa_technical_waiting q JOIN wa_technical_mode m ON m.run_id=q.run_id AND m.active_until>now() WHERE q.attempted_at IS NULL AND (q.responded_at IS NULL OR (q.last_at>q.responded_at AND q.responded_at<=now()-interval '10 minutes')) ORDER BY q.last_at LIMIT 1 FOR UPDATE OF q SKIP LOCKED) RETURNING w.run_id,w.phone,w.attempted_at::text AS claim_token");
    if(!r.rowCount)break;
-   const {run_id,phone}=r.rows[0];
+   const {run_id,phone,claim_token}=r.rows[0];
    try{
     if(isProtected(phone))throw Error("PRIVATE_CONTACT");
     const current=await status();
     if(!current.active||current.run_id!==run_id)throw Error("MODE_ENDED");
+    // A manual reply may have cancelled the claim since it was taken.
+    const valid=await pool.query("SELECT 1 FROM wa_technical_waiting q JOIN wa_technical_mode m ON m.run_id=q.run_id AND m.active_until>now() WHERE q.run_id=$1 AND q.phone=$2 AND q.attempted_at=$3::timestamptz AND (q.responded_at IS NULL OR (q.last_at>q.responded_at AND q.responded_at<=now()-interval '10 minutes'))",[run_id,phone,claim_token]);
+    if(!valid.rowCount)continue;
     await send(phone,absenceMessage());
-    await pool.query("UPDATE wa_technical_waiting SET sent_at=now() WHERE run_id=$1 AND phone=$2",[run_id,phone]);
-   }catch(e){await pool.query("UPDATE wa_technical_waiting SET error=$3 WHERE run_id=$1 AND phone=$2",[run_id,phone,String(e?.message||"SEND_FAILED").slice(0,100)]);}
+    await pool.query("UPDATE wa_technical_waiting SET sent_at=now() WHERE run_id=$1 AND phone=$2 AND attempted_at=$3::timestamptz",[run_id,phone,claim_token]);
+   }catch(e){await pool.query("UPDATE wa_technical_waiting SET error=$4 WHERE run_id=$1 AND phone=$2 AND attempted_at=$3::timestamptz",[run_id,phone,claim_token,String(e?.message||"SEND_FAILED").slice(0,100)]);}
   }
  }
- return {status,snapshot,set,capture,manual,drain};
+ return {status,snapshot,set,capture,manual,drain,nextDue};
 }
