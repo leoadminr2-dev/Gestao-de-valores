@@ -714,14 +714,26 @@ export function openingGreeting(when=new Date()) {
 }
 
 export function advance(session,incoming) {
-  const result=advanceCore(session,incoming);
+  let result;
+  const t=norm(incoming?.text);
+  const stage=session?.stage||"menu";
+  if(incoming?.technicalMode && (session?.mode||"bot")==="bot" && !session?.data?.handoffPending && ["menu","tecnico_nome"].includes(stage) && (!incoming?.type || incoming.type==="text") && !isCommercialIntent(t) && !marketIntent(t) && !/^(menu|inicio|reiniciar|0|[1-9]|cancelar|desistir|cancela|humano|atendente|responsavel)$/.test(t) && !/cheiro de queimado|fumaca|faisca|choque eletrico|incendio|vazamento de gas|cheiro (?:forte )?de gas|falar com|nota fiscal|desconto|garantia|parcel|cartao/.test(t)){
+    const data={...(session?.data||{})};
+    const name=String(incoming?.text||"").trim();
+    Object.assign(data,contactDetails(name));
+    const greeting=/^(?:oi|ola|bom dia|boa tarde|boa noite|tudo bem|oi tudo bem|ola tudo bem)[!,.? ]*$/i.test(t);
+    if(stage==="tecnico_nome" && !data.cliente && !greeting && !ack.test(t) && /^[\p{L}][\p{L}'’ -]{1,79}$/u.test(name) && !/^(sim|nao|outro assunto|pessoal)$/.test(t))data.cliente=name;
+    result=data.cliente?{stage:"assunto",mode:"bot",data,reply:"Prazer, "+data.cliente.split(" ")[0]+"! 😊 Como posso ajudar você hoje?"}:{stage:"tecnico_nome",mode:"bot",data,reply:"😊 Como posso chamar você? Pode também me contar o que precisa hoje."};
+  }else{
+    result=advanceCore(stage==="tecnico_nome"?{...session,stage:"menu"}:session,incoming);
+  }
   if(typeof result?.reply!=="string" || !result.reply.trim())return result;
   const greeted=session?.data?.saudacaoEnviada===true;
   const data={...(result.data||{}),saudacaoEnviada:true};
   let reply=result.reply.replaceAll(welcome+"\n\n","").replaceAll(welcome,"");
   if(!greeted){
     const received=incoming?.receivedAt ? new Date(incoming.receivedAt) : new Date();
-    reply=openingGreeting(received)+"\n\n"+reply;
+    reply=openingGreeting(received)+(incoming?.technicalMode?"\n\n🔧 Nosso responsável técnico está realizando um atendimento neste momento. Vou dar prosseguimento ao seu atendimento por aqui, esclarecer dúvidas, organizar orçamentos e registrar solicitações. 🤝":"")+"\n\n"+reply;
   }
   return {...result,data,reply};
 }

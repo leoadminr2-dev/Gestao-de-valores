@@ -38,3 +38,33 @@ test("manual reply cancelling a claimed message prevents sending",async()=>{
  await createTechnicalMode(pool).drain(()=>assert.fail("cancelled claim must not send"),()=>false);
  assert.equal(checked,true);
 });
+
+import {advance} from "./bot.mjs";
+test("modo tecnico segue atendimento de venda da captura de tela",()=>{
+ const a=advance({stage:"menu",mode:"bot",data:{}},{text:"https://facebook.com/marketplace/item/123",technicalMode:true});
+ assert.match(a.reply,/realizando um atendimento/);
+ assert.match(a.reply,/Como posso chamar/);
+ const b=advance(a,{text:"Tenho uma máquina para vender",technicalMode:true});
+ assert.equal(b.data.servico,"Venda de equipamento");
+ assert.equal(b.stage,"nome");
+ assert.doesNotMatch(b.reply,/realizando um atendimento/);
+});
+test("modo tecnico identifica nome e continua em vez de enviar ausencia",()=>{
+ const a=advance({stage:"menu",mode:"bot",data:{}},{text:"Boa tarde",technicalMode:true});
+ const b=advance(a,{text:"Maria",technicalMode:true});
+ assert.equal(b.data.cliente,"Maria");
+ assert.match(b.reply,/Como posso ajudar/);
+ const c=advance(b,{text:"Quero vender minha máquina de lavar",technicalMode:true});
+ assert.equal(c.data.servico,"Venda de equipamento");
+ assert.equal(c.data.cliente,"Maria");
+ assert.equal(c.stage,"bairro");
+});
+test("pausa manual usa instante original do evento e não reinicia em retry",async()=>{
+ const calls=[];const pool={query:async(sql,params)=>{calls.push({sql,params});return {rowCount:1,rows:[]};}};
+ const m=createTechnicalMode(pool);const at=new Date("2026-11-25T15:00:00Z");
+ await m.manualAssist("5521999999999",at);
+ assert.match(calls.at(-1).sql,/responded_at<EXCLUDED.responded_at/);
+ assert.deepEqual(calls.at(-1).params,["5521999999999",at]);
+ await m.paused("5521999999999");
+ assert.match(calls.at(-1).sql,/interval '10 minutes'/);
+});

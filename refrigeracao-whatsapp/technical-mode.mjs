@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-export const ABSENCE_MESSAGE="❄️ *LEONARDO MOREIRA REFRIGERAÇÃO*\n\n🔧 No momento, estamos realizando um atendimento técnico e não conseguimos responder imediatamente.\n\n💬 Fique à vontade para deixar sua mensagem. Assim que possível, retornarei pessoalmente para atendê-lo.\n\n🤝 Agradecemos pela compreensão e pela confiança em nosso trabalho!\n\n*Qualidade, responsabilidade e compromisso com você!* 🛠️";
+export const ABSENCE_MESSAGE="❄️ *LEONARDO MOREIRA REFRIGERAÇÃO*\n\n🔧 No momento, estamos realizando um atendimento técnico e não conseguimos responder imediatamente.\n\n🤖 Sou o assistente virtual e vou dar prosseguimento ao seu atendimento. Como posso chamar você e como posso ajudar?\n\n🤝 Agradecemos pela compreensão e pela confiança em nosso trabalho!\n\n*Qualidade, responsabilidade e compromisso com você!* 🛠️";
 export function absenceMessage(now=new Date()){
  const hour=Number(new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",hour:"2-digit",hourCycle:"h23"}).format(now));
  const greeting=hour>=5&&hour<12?"☀️ Bom dia!":hour>=12&&hour<18?"🌤️ Boa tarde!":"🌙 Boa noite!";
@@ -69,5 +69,19 @@ export function createTechnicalMode(pool){
    }catch(e){await pool.query("UPDATE wa_technical_waiting SET error=$4 WHERE run_id=$1 AND phone=$2 AND attempted_at=$3::timestamptz",[run_id,phone,claim_token,String(e?.message||"SEND_FAILED").slice(0,100)]);}
   }
  }
- return {status,snapshot,set,capture,manual,drain,nextDue};
+ async function manualAssist(phone,at){
+  await ensure();
+  const r=await pool.query("INSERT INTO wa_technical_waiting(run_id,phone,responded_at) SELECT run_id,$1,$2::timestamptz FROM wa_technical_mode WHERE id=1 AND active_until>now() ON CONFLICT(run_id,phone) DO UPDATE SET responded_at=EXCLUDED.responded_at,attempted_at=NULL,sent_at=NULL,error=NULL WHERE wa_technical_waiting.responded_at IS NULL OR wa_technical_waiting.responded_at<EXCLUDED.responded_at RETURNING phone",[phone,at]);
+  return r.rowCount>0;
+ }
+ async function paused(phone){
+  await ensure();
+  const r=await pool.query("SELECT 1 FROM wa_technical_waiting q JOIN wa_technical_mode m ON m.run_id=q.run_id AND m.active_until>now() WHERE q.phone=$1 AND q.responded_at>now()-interval '10 minutes'",[phone]);
+  return r.rowCount>0;
+ }
+ async function markAssisted(phone){
+  await ensure();
+  await pool.query("UPDATE wa_technical_waiting q SET sent_at=now(),error=NULL FROM wa_technical_mode m WHERE m.run_id=q.run_id AND m.active_until>now() AND q.phone=$1 AND (q.responded_at IS NULL OR q.responded_at<=now()-interval '10 minutes')",[phone]);
+ }
+ return {status,snapshot,set,capture,manual,drain,nextDue,manualAssist,paused,markAssisted};
 }

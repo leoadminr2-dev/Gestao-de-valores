@@ -459,7 +459,7 @@ function renderTechnical(data){
   const li=document.createElement("li");
   const a=document.createElement("a");
   a.href="https://wa.me/"+encodeURIComponent(row.phone);a.target="_blank";a.rel="noopener noreferrer";a.textContent=row.phone;
-  li.append(a,document.createTextNode(" · "+dateText(row.last_at)+" · "+(row.sent_at?"Avisado":row.error?"Falha no aviso":row.attempted_at?"Envio não confirmado":row.responded_at&&Date.now()-new Date(row.responded_at).getTime()<600000?"Pausa manual de 10 minutos":"Aguardando aviso")));
+  li.append(a,document.createTextNode(" · "+dateText(row.last_at)+" · "+(row.responded_at&&Date.now()-new Date(row.responded_at).getTime()<600000?"Pausa manual de 10 minutos":row.sent_at?"Assistente em atendimento":row.error?"Falha no envio":"Aguardando atendimento")));
   return li;
  }));
 }

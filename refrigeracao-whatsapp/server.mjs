@@ -38,6 +38,12 @@ function scheduleTechnical(due){
 }
 const technical=createTechnicalMode(pool);
 const protectedPhone=phone=>isProtectedPhone(phone,WHATSAPP_PRIVATE_PHONES);
+function eligible(phone,incoming,session,active){
+ if(protectedPhone(phone))return false;
+ const normal=shouldHandleMessage({phone,messageType:incoming.type,text:incoming.text,session,protectedPhones:WHATSAPP_PRIVATE_PHONES});
+ if(normal)return true;
+ return Boolean(active && session?.mode!=="human" && session?.stage!=="outro_assunto" && ["text","image","video","interactive","button","audio","document"].includes(incoming.type));
+}
 
 function json(res,status,data){
   res.writeHead(status,{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"});
@@ -69,13 +75,13 @@ function msgText(m){
 async function handleInbound(message){
  const phone=safePhone(message?.from),messageId=String(message?.id||"");
  if(!phone||!messageId||messageId.length>255||protectedPhone(phone))return;
- if(await technical.capture(phone))return;
+ const active=(await technical.status()).active;
  const type=message?.type,raw=type==="image"?message.image:type==="video"?message.video:null;
  const media=message?.media||(raw?{provider:"meta",type,id:String(raw.id||""),mimeType:String(raw.mime_type||"")}:null);
  const incoming={text:msgText(message),type,media};
  // Do not create a database row for a personal message without service intent.
  const existing=await pool.query("SELECT stage,mode,data,last_message_at FROM wa_sessions WHERE phone=$1",[phone]);
- if(!shouldHandleMessage({phone,messageType:incoming.type,text:incoming.text,session:existing.rows[0]||null,protectedPhones:WHATSAPP_PRIVATE_PHONES}))return;
+ if(!eligible(phone,incoming,existing.rows[0]||null,active))return;
  const db=await pool.connect();
  let duplicate=false;
  try{
@@ -85,12 +91,12 @@ async function handleInbound(message){
   const inserted=await db.query("INSERT INTO wa_processed_messages (message_id,phone) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING message_id",[messageId,phone]);
   if(inserted.rowCount===0){duplicate=true;await db.query("COMMIT");return;}
   const current=sess.rows[0];
-  if(!shouldHandleMessage({phone,messageType:incoming.type,text:incoming.text,session:current,protectedPhones:WHATSAPP_PRIVATE_PHONES})){
+  if(!eligible(phone,incoming,current,active)){
    await db.query("COMMIT");
    return; // Conversa privada: não gerar resposta, pedido ou conteúdo na fila.
   }
   const legacyPrivate=current.mode==="human"&&current.data?.commercialActivated!==true;
-  const move=advance({stage:legacyPrivate?"menu":current.stage,mode:legacyPrivate?"bot":current.mode,data:{...(legacyPrivate?{}:current.data),commercialActivated:true}},incoming);
+  const move=advance({stage:legacyPrivate?"menu":current.stage,mode:legacyPrivate?"bot":current.mode,data:{...(legacyPrivate?{}:current.data),commercialActivated:true}},{...incoming,technicalMode:active});
   if(move.mode==="bot"&&!/^(cancelar|desistir|cancela)$/.test(String(incoming.text||"").trim().toLowerCase())){
    move.data={...move.data,commercialActivated:true};
   }
@@ -118,16 +124,19 @@ async function handleInbound(message){
  }finally{db.release();}
  // The durable outbound queue is drained by the provider event worker/timer.
 }
-async function handleManualReply(phone,technicalRecorded=false){
- if(!technicalRecorded&&!protectedPhone(phone))await technical.manual(phone);
+async function handleManualReply(phone,at=new Date()){
+ if(protectedPhone(phone))return;
+ const active=(await technical.status()).active;
+ if(active)await technical.manualAssist(phone,at);
  // A human reply from the Business App pauses bot responses for this customer.
  // Never interpret the echo as a new inbound order or send an automatic reply.
  const db=await pool.connect();
  try{
   await db.query("BEGIN");
   const existing=await db.query("SELECT mode,data,last_message_at FROM wa_sessions WHERE phone=$1 FOR UPDATE",[phone]);
-  if(shouldPauseForManualReply(existing.rows[0])){
-   await db.query("UPDATE wa_sessions SET mode='human',updated_at=now() WHERE phone=$1",[phone]);
+  if(active || shouldPauseForManualReply(existing.rows[0])){
+   if(!active)await db.query("UPDATE wa_sessions SET mode='human',updated_at=now() WHERE phone=$1",[phone]);
+   if(active)await db.query("UPDATE wa_provider_events SET processed_at=now(),lease_until=NULL,last_error='HUMAN_TAKEOVER' WHERE processed_at IS NULL AND event_type='incoming' AND payload->>'phone'=$1 AND created_at<=$2::timestamptz",[phone,at]);
    await db.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE phone=$1 AND sent_at IS NULL AND cancelled_at IS NULL",[phone]);
   }
   await db.query("COMMIT");
@@ -140,24 +149,25 @@ async function receiveYCloudEvent(event){
  // Verificar intenção antes de salvar o payload, preservando mensagens particulares.
  if(protectedPhone(event.phone))return false;
  if(event.kind==="incoming"){
-  if(await technical.capture(event.phone))return true;
-  if(!["text","image","video","interactive","button"].includes(event.messageType))return false;
+  const active=(await technical.status()).active;
+  if(!["text","image","video","interactive","button","audio","document"].includes(event.messageType))return false;
   const previous=await pool.query("SELECT stage,mode,data,last_message_at FROM wa_sessions WHERE phone=$1",[event.phone]);
   const controlledTest=YCLOUD_TEST_MODE&&event.messageType==="text"&&String(event.text||"").trim().toUpperCase()==="TESTE LMR";
-  if(!controlledTest&&!shouldHandleMessage({phone:event.phone,messageType:event.messageType,text:event.text,session:previous.rows[0]||null,protectedPhones:WHATSAPP_PRIVATE_PHONES}))return false;
+  if(!controlledTest&&!eligible(event.phone,{type:event.messageType,text:event.text},previous.rows[0]||null,active))return false;
  }else if(event.kind==="manual_reply"){
-  await technical.manual(event.phone);
+  const active=(await technical.status()).active;
   const previous=await pool.query("SELECT mode,data,last_message_at FROM wa_sessions WHERE phone=$1",[event.phone]);
-  if(!shouldPauseForManualReply(previous.rows[0]))return false;
+  if(!active&&!shouldPauseForManualReply(previous.rows[0]))return false;
  }
  if(isProtectedPhone(event.phone,WHATSAPP_PRIVATE_PHONES))return false;
  const saved=await pool.query("INSERT INTO wa_provider_events(event_id,event_type,payload) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING event_id",[event.id,event.kind,JSON.stringify(event)]);
+ if(saved.rowCount===1&&event.kind==="incoming")await technical.capture(event.phone);
  return saved.rowCount===1;
 }
 async function processYCloudEvents(){
- if(!ycloudReady)return;
+ if(!ycloudReady&&!metaReady)return;
  for(let i=0;i<20;i++){
-  const claim=await pool.query("UPDATE wa_provider_events SET lease_until=now()+interval '90 seconds',attempts=attempts+1 WHERE event_id=(SELECT event_id FROM wa_provider_events WHERE processed_at IS NULL AND attempts<20 AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING event_id,payload");
+  const claim=await pool.query("UPDATE wa_provider_events SET lease_until=now()+interval '90 seconds',attempts=attempts+1 WHERE event_id=(SELECT e.event_id FROM wa_provider_events e WHERE e.processed_at IS NULL AND e.attempts<20 AND (e.lease_until IS NULL OR e.lease_until<now()) AND (e.event_type='manual_reply' OR NOT EXISTS (SELECT 1 FROM wa_technical_waiting q JOIN wa_technical_mode m ON m.run_id=q.run_id AND m.active_until>now() WHERE q.phone=e.payload->>'phone' AND q.responded_at>now()-interval '10 minutes')) ORDER BY CASE WHEN e.event_type='manual_reply' THEN 0 ELSE 1 END,e.created_at LIMIT 1 FOR UPDATE OF e SKIP LOCKED) RETURNING event_id,payload,created_at");
   if(!claim.rowCount)break;
   const event=claim.rows[0].payload;
   try{
@@ -174,9 +184,9 @@ async function processYCloudEvents(){
      }
     }
    }
-   if(event.kind==="manual_reply"){await handleManualReply(event.phone,true);}
+   if(event.kind==="manual_reply"){await handleManualReply(event.phone,claim.rows[0].created_at);}
    else if(event.kind==="incoming"){
-    await handleInbound({from:event.phone,id:"ycloud-"+event.messageId,type:event.messageType,text:{body:event.text||""},media:event.media||null});
+    await handleInbound(event.provider==="meta"?event.message:{from:event.phone,id:"ycloud-"+event.messageId,type:event.messageType,text:{body:event.text||""},media:event.media||null});
    }
    await pool.query("UPDATE wa_provider_events SET processed_at=now(),lease_until=NULL,last_error=NULL WHERE event_id=$1",[claim.rows[0].event_id]);
   }catch(err){
@@ -265,7 +275,6 @@ async function sendMessage(phone,message){
 async function sendOutbox(){
  if(!metaReady&&!ycloudReady)return;
  for(let i=0;i<10;i++){
-  if((await technical.status()).active)return;
   const picked=await pool.query("UPDATE wa_outbound SET lease_until=now()+interval '90 seconds',attempts=attempts+1 WHERE id=(SELECT id FROM wa_outbound WHERE sent_at IS NULL AND cancelled_at IS NULL AND attempts<15 AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING id,phone,message");
   if(picked.rowCount===0)break;
   const row=picked.rows[0];
@@ -274,7 +283,7 @@ async function sendOutbox(){
    continue;
   }
   const last=await pool.query("SELECT last_message_at,mode,data FROM wa_sessions WHERE phone=$1",[row.phone]);
-  if(last.rows[0]?.mode==="human"){
+  if(last.rows[0]?.mode==="human" || await technical.paused(row.phone) || (await pool.query("SELECT 1 FROM wa_provider_events WHERE processed_at IS NULL AND event_type='manual_reply' AND payload->>'phone'=$1 LIMIT 1",[row.phone])).rowCount){
    await pool.query("UPDATE wa_outbound SET cancelled_at=now(),last_error='HUMAN_TAKEOVER' WHERE id=$1",[row.id]);
    continue;
   }
@@ -285,6 +294,7 @@ async function sendOutbox(){
   try{
    await sendMessage(row.phone,row.message);
    await pool.query("UPDATE wa_outbound SET sent_at=now(),lease_until=NULL,last_error=NULL WHERE id=$1",[row.id]);
+   await technical.markAssisted(row.phone).catch(()=>{});
    // A partir daqui, só Leonardo ou o comando MENU retoma a conversa.
    if(last.rows[0]?.data?.handoffPending===true){
     await pool.query("UPDATE wa_sessions SET mode='human',data=data-'handoffPending',updated_at=now() WHERE phone=$1 AND mode='bot' AND data->>'handoffPending'='true'",[row.phone]);
@@ -297,7 +307,13 @@ async function sendOutbox(){
 async function tick(){
  if(processing){rerun=true;return;}
  processing=true;
- try{await processYCloudEvents();await technical.drain(sendMessage,protectedPhone);scheduleTechnical(await technical.nextDue());await syncOrders();await sendOutbox();}
+ try{
+  await technical.status(); // garante as tabelas antes das consultas de pausa
+  await processYCloudEvents();
+  const due=await pool.query("SELECT MIN(LEAST(q.responded_at+interval '10 minutes',m.active_until)) AS due FROM wa_provider_events e JOIN wa_technical_waiting q ON q.phone=e.payload->>'phone' JOIN wa_technical_mode m ON m.run_id=q.run_id AND m.active_until>now() WHERE e.processed_at IS NULL AND e.event_type='incoming' AND e.attempts<20 AND q.responded_at>now()-interval '10 minutes'");
+  scheduleTechnical(due.rows[0]?.due||null);
+  await syncOrders();await sendOutbox();
+ }
  catch(e){console.error("FALHA_FILA",String(e?.code||e?.message||"ERR").slice(0,100));}
  finally{processing=false;if(rerun){rerun=false;setImmediate(()=>{void tick()});}}
 }
@@ -355,11 +371,13 @@ const server=http.createServer(async(req,res)=>{
     if(String(value.metadata?.phone_number_id||"")!==PHONE_NUMBER_ID)continue;
     if(change.field!=="messages")continue;
     for(const message of value.messages||[]){
-     if(!["text","image","video","interactive","button"].includes(message.type)){
-      const p=safePhone(message.from);if(p&&!protectedPhone(p)&&await technical.capture(p))processed++;
-      continue;
-     }
-     await handleInbound(message);
+     if(!["text","image","video","interactive","button","audio","document"].includes(message.type))continue;
+     const p=safePhone(message.from);
+     if(p&&!protectedPhone(p)&&(await technical.status()).active){
+      const id="meta-"+String(message.id||"");
+      const saved=await pool.query("INSERT INTO wa_provider_events(event_id,event_type,payload) VALUES($1,'incoming',$2) ON CONFLICT DO NOTHING RETURNING event_id",[id,JSON.stringify({kind:"incoming",provider:"meta",phone:p,message})]);
+      if(saved.rowCount)await technical.capture(p);
+     }else await handleInbound(message);
      processed++;
     }
    }
