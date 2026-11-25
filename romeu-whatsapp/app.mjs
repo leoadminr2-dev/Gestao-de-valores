@@ -12,10 +12,44 @@ export function signed(raw,signature,secret){
   const digest='sha256='+crypto.createHmac('sha256',secret).update(raw).digest('hex');
   return equal(digest,signature);
 }
+const price = cents => (cents / 100).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+const quoteExample = 'Envie o pedido completo assim:\nOrçamento para Carol\n2 x Higienização de split | R$ 280,00 cada\n1 x Material | R$ 50,00 cada';
+const quantityWords = {um:1,uma:1,dois:2,duas:2,três:3,tres:3,quatro:4,cinco:5};
+function parseQuote(phrase) {
+  const match = phrase.match(/^(?:(?:assistente|romeu)[, ]+)?(?:(?:eu )?(?:preciso de|quero|faz|faça|fazer|monta|monte|prepara|prepare)\s+)?(?:um\s+)?or[çc]amento\b\s*(.*)$/isu);
+  if (!match) return null;
+  const header = match[1].match(/^(?:para|pra|pro|da|do|de)\s+(?:(?:a|o)\s+)?([\p{L}][\p{L} '-]{0,70}?)[.:,\n]\s*([\s\S]+)$/iu);
+  if (!header) return {action:'quoteGuide'};
+  const items = [];
+  for (const line of header[2].trim().split(/\n+/)) {
+    const reference = line.trim().match(/^(?:são\s+)?(\d{1,3}|um|uma|dois|duas|três|tres|quatro|cinco)\s+(?:x\s+)?(higienizaç(?:ão|ões) de split(?:s)? (?:de )?(?:9[. ]?000|9 mil)\s*btus?|limpeza(?:s)? de ar(?:-condicionado)? de janela)[.!]?$/iu);
+    if (reference) {
+      const count = quantityWords[reference[1].toLowerCase()] ?? Number(reference[1]);
+      if (!count) return {action:'quoteGuide'};
+      items.push({count, description:reference[2], cents:/^higieniza/i.test(reference[2]) ? 28000 : 25000});
+      continue;
+    }
+    const item = line.trim().match(/^(?:são\s+)?(\d{1,3}|um|uma|dois|duas|três|tres|quatro|cinco)\s+(?:x\s+)?(.{2,140}?)\s*[,|]\s*R\$\s*(\d{1,6}|\d{1,3}(?:\.\d{3}){1,2})(?:,(\d{2}))?\s*(cada|por unidade|a unidade)?[.!]?$/iu);
+    if (!item || /R\$|\||\n/i.test(item[2])) return {action:'quoteGuide'};
+    const count = quantityWords[item[1].toLowerCase()] ?? Number(item[1]);
+    const cents = Number(item[3].replaceAll('.','')) * 100 + Number(item[4] || 0);
+    if (!count || !cents || (count > 1 && !item[5])) return {action:'quoteGuide'};
+    items.push({count, description:item[2].trim(), cents});
+  }
+  return {action:'quote', client:header[1].trim(), items};
+}
+function quoteDraft(cmd) {
+  const lines = cmd.items.map(i => '• '+i.description+' — '+i.count+' × '+price(i.cents)+' = '+price(i.count*i.cents));
+  const total = cmd.items.reduce((sum,i)=>sum+i.count*i.cents,0);
+  return ['Rascunho para sua revisão 👇','','*Leonardo Moreira Refrigeração*','Olá, '+cmd.client+'! Tudo bem? Segue o orçamento solicitado.', ...lines, '*Total: '+price(total)+'*','Qualquer dúvida, estou à disposição!'].join('\n');
+}
+
 export function parse(input){
   const original=String(input||'').trim().slice(0,1500);
   const phrase=original.replace(/^romeu[,!?:\s]*/i,'').replace(/^anot[ae]\s+que\s+/i,'');
   const s=phrase.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const quote=parseQuote(phrase);
+  if(quote)return String(input).trim().length>1500 ? {action:'quoteGuide'} : quote;
   if(!s)return {action:'unknown'};
   if(/^(ajuda|menu|oi|ola|iniciar|start)\b/.test(s))return {action:'help'};
   if(/^(resumo|status|saldo)\b/.test(s))return {action:'summary'};
@@ -36,7 +70,9 @@ export function parse(input){
   return {action:'unknown'};
 }
 export function reply(cmd,data={}){
-  if(cmd.action==='help')return '🤖 *ROMEU — Minha Vida em Dia*\n\nComandos:\n• tarefa levar o carro\n• comprar café e arroz\n• gastei R$ 80 com combustível\n• recebi R$ 120 de cliente\n• anotar reunião\n• tarefas\n• resumo';
+  if(cmd.action==='quote')return quoteDraft(cmd);
+  if(cmd.action==='quoteGuide')return 'Preciso do cliente, da descrição, da quantidade e do preço por unidade para calcular. '+quoteExample;
+  if(cmd.action==='help')return '🤖 *ROMEU — Minha Vida em Dia*\n\nComandos:\n• orçamento para Carol: 2 x higienização | R$ 280 cada\n• tarefa levar o carro\n• comprar café e arroz\n• gastei R$ 80 com combustível\n• recebi R$ 120 de cliente\n• anotar reunião\n• tarefas\n• resumo';
   if(cmd.action==='create')return '✅ '+({task:'Tarefa',expense:'Despesa',income:'Recebimento',shopping:'Compra',note:'Nota',idea:'Ideia',study:'Estudo'}[cmd.kind]||'Registro')+' salvo: '+cmd.content+(cmd.amount?' — R$ '+cmd.amount.toFixed(2).replace('.',','):'');
   if(cmd.action==='tasks')return data.items?.length?'📋 *Tarefas abertas*\n'+data.items.map(x=>'• '+x.content).join('\n'):'Você não tem tarefas abertas.';
   if(cmd.action==='summary')return '📊 *Resumo*\nTarefas abertas: '+(data.tasks||0)+'\nRegistros: '+(data.total||0)+'\nDespesas: R$ '+Number(data.expenses||0).toFixed(2).replace('.',',')+'\nRecebimentos: R$ '+Number(data.income||0).toFixed(2).replace('.',',');
@@ -113,7 +149,7 @@ export function createHandler(env,{store,send=sendToMeta}={}){
   return async function handle(request){
     const url=new URL(request.url);
     if(url.pathname==='/'&&request.method==='GET')return new Response(homeHtml,{status:200,headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','content-security-policy':"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'; frame-ancestors 'none'"}});
-    if(url.pathname==='/health'&&request.method==='GET')return json(200,{service:'romeu-whatsapp',version:'0.2.0',status:'ready_for_setup',outbound:env.OUTBOUND_ENABLED==='true',meta_configured:!!(env.META_VERIFY_TOKEN&&env.META_APP_SECRET&&env.META_ACCESS_TOKEN&&env.META_PHONE_NUMBER_ID),database_configured:!!env.DATABASE_URL,allowlist_configured:allowed.size>0});
+    if(url.pathname==='/health'&&request.method==='GET')return json(200,{service:'romeu-whatsapp',version:'0.3.0',status:ready()&&env.OUTBOUND_ENABLED==='true'?'configured':'ready_for_setup',outbound:env.OUTBOUND_ENABLED==='true',meta_configured:!!(env.META_VERIFY_TOKEN&&env.META_APP_SECRET&&env.META_ACCESS_TOKEN&&env.META_PHONE_NUMBER_ID),database_configured:!!env.DATABASE_URL,allowlist_configured:allowed.size>0});
     if(url.pathname!=='/webhook')return json(404,{error:'not found'});
     if(request.method==='GET')return url.searchParams.get('hub.mode')==='subscribe'&&equal(url.searchParams.get('hub.verify_token'),env.META_VERIFY_TOKEN)&&url.searchParams.has('hub.challenge')
       ?new Response(url.searchParams.get('hub.challenge'),{status:200,headers:{'content-type':'text/plain'}}):json(403,{error:'invalid verification'});

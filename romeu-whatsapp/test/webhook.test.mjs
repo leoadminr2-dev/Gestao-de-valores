@@ -44,3 +44,31 @@ test('health sem segredos',async()=>{const r=await createHandler(env)(new Reques
 test('erro processamento sinaliza retry HTTP 500',async()=>{const r=await createHandler(env,{store:{process:async()=>{throw Error('simulated');}}})(request());assert.equal(r.status,500);});
 test('endpoint desconhecido',async()=>assert.equal((await createHandler(env)(new Request('https://example.test/other'))).status,404));
 test('servidor HTTP real e limite POST',async()=>{const srv=startServer({...env,PORT:'0'});await new Promise(resolve=>srv.once('listening',resolve));try{const port=srv.address().port;const r=await fetch('http://127.0.0.1:'+port+'/health');assert.equal(r.status,200);const huge=await fetch('http://127.0.0.1:'+port+'/webhook',{method:'POST',body:'x'.repeat(129*1024)});assert.equal(huge.status,413);}finally{await new Promise(resolve=>srv.close(resolve));}});
+
+test('orçamento particular passa pelo webhook e volta ao solicitante',async()=>{
+  const payload=data();
+  payload.entry[0].changes[0].value.messages[0].text.body='Romeu, faz um orçamento pra Carol. São dois splits de 9 mil BTU pra higienizar, R$ 280 cada.';
+  let sends=0;
+  const handler=createHandler(env,{store:{process:async({cmd})=>{assert.equal(cmd.action,'quote');return {data:{}};}},send:async(_,to,body)=>{
+    sends++;
+    assert.equal(to,'5521999888777');
+    assert.match(body,/Carol/);
+    assert.match(body,/Total: R\$\s560,00/);
+  }});
+  assert.equal((await handler(request(payload))).status,200);
+  assert.equal(sends,1);
+});
+test('pedido incompleto não vira tarefa nem inventa preço',()=>{
+  for(const text of ['preciso de um orçamento para Carol','Orçamento pra Carol: 2 splits, R$ 280','Orçamento pra Carol: 2 splits, R$ 280 cada e material R$ 50']){
+    assert.equal(parse(text).action,'quoteGuide');
+  }
+});
+test('vários itens e centavos',()=>{
+  const cmd=parse('Orçamento para João Vicente\n2 x Limpeza | R$ 280,50 cada\n1 x Material | R$ 199,00');
+  assert.match(reply(cmd),/Total: R\$\s760,00/);
+});
+test('referências de preço restritas ao serviço definido',()=>{
+  assert.match(reply(parse('Orçamento pra Ana: duas higienizações de split de 9.000 BTUs')),/560,00/);
+  assert.match(reply(parse('Orçamento para Ana: 1 limpeza de ar de janela')),/250,00/);
+  assert.equal(parse('Orçamento para Ana: 2 higienizações de split de 24.000 BTUs').action,'quoteGuide');
+});
