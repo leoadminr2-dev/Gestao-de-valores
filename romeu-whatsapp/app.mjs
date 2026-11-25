@@ -18,6 +18,13 @@ const quantityWords = {um:1,uma:1,dois:2,duas:2,três:3,tres:3,quatro:4,cinco:5}
 function parseQuote(phrase) {
   const match = phrase.match(/^(?:(?:assistente|romeu)[, ]+)?(?:(?:eu )?(?:preciso de|quero|faz|faça|fazer|monta|monte|prepara|prepare)\s+)?(?:um\s+)?or[çc]amento\b\s*(.*)$/isu);
   if (!match) return null;
+  // Accept a single service with explicitly supplied labour and material amounts.
+  const inline = match[1].trim().match(/^de\s+([^,\n]{3,160}),?\s+com\s+m[ãa]o\s+de\s+obra\s+de\s+R\$\s*(\d{1,6}|\d{1,3}(?:\.\d{3}){1,2})(?:,(\d{2}))?\s+e\s+materia(?:l|is)\s+de\s+R\$\s*(\d{1,6}|\d{1,3}(?:\.\d{3}){1,2})(?:,(\d{2}))?[.!]?$/iu);
+  if (inline && !/R\$|\||\n/i.test(inline[1])) {
+    const cents = (whole, fraction) => Number(whole.replaceAll('.',''))*100+Number(fraction||0);
+    const labour=cents(inline[2],inline[3]), material=cents(inline[4],inline[5]);
+    if (labour > 0 && material > 0) return {action:'quote',client:null,items:[{count:1,description:inline[1].trim()+' — mão de obra',cents:labour},{count:1,description:'Material',cents:material}]};
+  }
   const header = match[1].match(/^(?:para|pra|pro|da|do|de)\s+(?:(?:a|o)\s+)?([\p{L}][\p{L} '-]{0,70}?)[.:,\n]\s*([\s\S]+)$/iu);
   if (!header) return {action:'quoteGuide'};
   const items = [];
@@ -41,7 +48,7 @@ function parseQuote(phrase) {
 function quoteDraft(cmd) {
   const lines = cmd.items.map(i => '• '+i.description+' — '+i.count+' × '+price(i.cents)+' = '+price(i.count*i.cents));
   const total = cmd.items.reduce((sum,i)=>sum+i.count*i.cents,0);
-  return ['Rascunho para sua revisão 👇','','*Leonardo Moreira Refrigeração*','Olá, '+cmd.client+'! Tudo bem? Segue o orçamento solicitado.', ...lines, '*Total: '+price(total)+'*','Qualquer dúvida, estou à disposição!'].join('\n');
+  return ['Rascunho para sua revisão 👇','','*Leonardo Moreira Refrigeração*',cmd.client?'Olá, '+cmd.client+'! Tudo bem? Segue o orçamento solicitado.':'Olá! Tudo bem? Segue o orçamento solicitado.', ...lines, '*Total: '+price(total)+'*','Qualquer dúvida, estou à disposição!'].join('\n');
 }
 
 export function parse(input){
@@ -157,7 +164,7 @@ export function createHandler(env,{store,send=sendToMeta}={}){
     if(!env.META_APP_SECRET)return json(503,{error:'not configured'});
     const raw=await request.text();
     if(Buffer.byteLength(raw)>maxBytes)return json(413,{error:'too large'});
-    if(!signed(raw,request.headers.get('x-hub-signature-256'),env.META_APP_SECRET))return json(401,{error:'invalid signature'});
+    if(!signed(raw,request.headers.get('x-hub-signature-256'),env.META_APP_SECRET)){console.warn('ROMEU webhook rejected: invalid signature');return json(401,{error:'invalid signature'});}
     let data;try{data=JSON.parse(raw);}catch{return json(400,{error:'invalid json'});}
     if(data.object!=='whatsapp_business_account'||!Array.isArray(data.entry))return json(400,{error:'invalid payload'});
     let accepted=0,ignored=0,errors=0;
@@ -177,6 +184,7 @@ export function createHandler(env,{store,send=sendToMeta}={}){
         }catch(e){errors++;console.error('Webhook processing failed:',String(e?.message||e).replace(/Bearer\s+\S+/gi,'Bearer ***'));}
       }
     }
+    console.info('ROMEU webhook processed',JSON.stringify({accepted,ignored,errors}));
     return json(errors?500:200,{ok:errors===0,accepted,ignored,errors});
   };
 }
