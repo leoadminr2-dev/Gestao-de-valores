@@ -6,6 +6,7 @@ import {shouldHandleMessage,isProtectedPhone,shouldPauseForManualReply} from "./
 import {appReplyPhones} from "./coexistence.mjs";
 import {verifyYCloudSignature,relevantYCloudEvent} from "./ycloud.mjs";
 import {createDashboard} from "./dashboard.mjs";
+import {createTechnicalMode} from "./technical-mode.mjs";
 
 const DB_URL=process.env.DATABASE_URL||"";
 const APP_SECRET=process.env.WHATSAPP_APP_SECRET||"";
@@ -27,6 +28,8 @@ const pool=new pg.Pool({connectionString:DB_URL,max:4,idleTimeoutMillis:10000,co
 const metaReady=Boolean(APP_SECRET&&VERIFY_TOKEN&&ACCESS_TOKEN&&PHONE_NUMBER_ID);
 const ycloudReady=Boolean(YCLOUD_WEBHOOK_SECRET&&YCLOUD_API_KEY&&YCLOUD_SENDER_NUMBER&&YCLOUD_AUTOREPLY_ENABLED);
 let processing=false;
+const technical=createTechnicalMode(pool);
+const protectedPhone=phone=>isProtectedPhone(phone,WHATSAPP_PRIVATE_PHONES);
 
 function json(res,status,data){
   res.writeHead(status,{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"});
@@ -57,7 +60,8 @@ function msgText(m){
 }
 async function handleInbound(message){
  const phone=safePhone(message?.from),messageId=String(message?.id||"");
- if(!phone||!messageId||messageId.length>255)return;
+ if(!phone||!messageId||messageId.length>255||protectedPhone(phone))return;
+ if(await technical.capture(phone))return;
  const type=message?.type,raw=type==="image"?message.image:type==="video"?message.video:null;
  const media=message?.media||(raw?{provider:"meta",type,id:String(raw.id||""),mimeType:String(raw.mime_type||"")}:null);
  const incoming={text:msgText(message),type,media};
@@ -107,6 +111,7 @@ async function handleInbound(message){
  // The durable outbound queue is drained by the provider event worker/timer.
 }
 async function handleManualReply(phone){
+ if(!protectedPhone(phone))await technical.manual(phone);
  // A human reply from the Business App pauses bot responses for this customer.
  // Never interpret the echo as a new inbound order or send an automatic reply.
  const db=await pool.connect();
@@ -125,11 +130,15 @@ async function handleManualReply(phone){
 }
 async function receiveYCloudEvent(event){
  // Verificar intenção antes de salvar o payload, preservando mensagens particulares.
+ if(protectedPhone(event.phone))return false;
  if(event.kind==="incoming"){
+  if(await technical.capture(event.phone))return true;
+  if(!["text","image","video","interactive","button"].includes(event.messageType))return false;
   const previous=await pool.query("SELECT stage,mode,data,last_message_at FROM wa_sessions WHERE phone=$1",[event.phone]);
   const controlledTest=YCLOUD_TEST_MODE&&event.messageType==="text"&&String(event.text||"").trim().toUpperCase()==="TESTE LMR";
   if(!controlledTest&&!shouldHandleMessage({phone:event.phone,messageType:event.messageType,text:event.text,session:previous.rows[0]||null,protectedPhones:WHATSAPP_PRIVATE_PHONES}))return false;
  }else if(event.kind==="manual_reply"){
+  await technical.manual(event.phone);
   const previous=await pool.query("SELECT mode,data,last_message_at FROM wa_sessions WHERE phone=$1",[event.phone]);
   if(!shouldPauseForManualReply(previous.rows[0]))return false;
  }
@@ -248,6 +257,7 @@ async function sendMessage(phone,message){
 async function sendOutbox(){
  if(!metaReady&&!ycloudReady)return;
  for(let i=0;i<10;i++){
+  if((await technical.status()).active)return;
   const picked=await pool.query("UPDATE wa_outbound SET lease_until=now()+interval '90 seconds',attempts=attempts+1 WHERE id=(SELECT id FROM wa_outbound WHERE sent_at IS NULL AND cancelled_at IS NULL AND attempts<15 AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING id,phone,message");
   if(picked.rowCount===0)break;
   const row=picked.rows[0];
@@ -279,11 +289,11 @@ async function sendOutbox(){
 async function tick(){
  if(processing)return;
  processing=true;
- try{await processYCloudEvents();await syncOrders();await sendOutbox();}
+ try{await processYCloudEvents();await technical.drain(sendMessage,protectedPhone);await syncOrders();await sendOutbox();}
  catch(e){console.error("FALHA_FILA",String(e?.code||e?.message||"ERR").slice(0,100));}
  finally{processing=false;}
 }
-const dashboard=createDashboard(pool);
+const dashboard=createDashboard(pool,{technical});
 const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url||"/","http://localhost");
@@ -298,7 +308,7 @@ const server=http.createServer(async(req,res)=>{
    const raw=await readBody(req);
    if(!verifyYCloudSignature(raw,String(req.headers["ycloud-signature"]||""),YCLOUD_WEBHOOK_SECRET))return json(res,403,{error:"invalid_ycloud_signature"});
    const payload=JSON.parse(raw.toString("utf8"));
-   const event=relevantYCloudEvent(payload,YCLOUD_SENDER_NUMBER);
+   const event=relevantYCloudEvent(payload,YCLOUD_SENDER_NUMBER,{allTypes:true});
    if(!event)return json(res,200,{ok:true,ignored:true});
    // Before final controlled validation, never process or store customer messages.
    if(!ycloudReady)return json(res,200,{ok:true,paused:true});
@@ -337,7 +347,10 @@ const server=http.createServer(async(req,res)=>{
     if(String(value.metadata?.phone_number_id||"")!==PHONE_NUMBER_ID)continue;
     if(change.field!=="messages")continue;
     for(const message of value.messages||[]){
-     if(!["text","image","video","interactive","button"].includes(message.type))continue;
+     if(!["text","image","video","interactive","button"].includes(message.type)){
+      const p=safePhone(message.from);if(p&&!protectedPhone(p)&&await technical.capture(p))processed++;
+      continue;
+     }
      await handleInbound(message);
      processed++;
     }

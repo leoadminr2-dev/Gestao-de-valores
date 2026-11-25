@@ -38,6 +38,7 @@ async function login(e){
  finally{btn.disabled=false;btn.textContent="Acessar central →";}
 }
 async function refresh(){
+ void refreshTechnical();
  text("lastUpdate","Atualizando dados...");
  try{
   const data=await call("/overview");
@@ -443,3 +444,34 @@ document.addEventListener("DOMContentLoaded",()=>{
  void init();
 });
 
+
+let technicalActive=false;
+let technicalBusy=false;
+function renderTechnical(data){
+ technicalActive=Boolean(data.active);
+ text("technicalStatus",technicalActive?"Em atendimento técnico até "+dateText(data.activeUntil):"Atendimento normal");
+ el("technicalToggle").textContent=technicalActive?"Finalizar atendimento técnico":"Iniciar atendimento técnico";
+ el("technicalToggle").disabled=technicalBusy;
+ el("technicalHours").disabled=technicalActive||technicalBusy;
+ const waiting=(data.waiting||[]).filter(x=>!x.responded_at);
+ text("technicalCount",waiting.length+" contato(s) aguardando retorno — último atendimento");
+ el("technicalWaiting").replaceChildren(...waiting.map(row=>{
+  const li=document.createElement("li");
+  const a=document.createElement("a");
+  a.href="https://wa.me/"+encodeURIComponent(row.phone);a.target="_blank";a.rel="noopener noreferrer";a.textContent=row.phone;
+  li.append(a,document.createTextNode(" · "+dateText(row.last_at)+" · "+(row.sent_at?"Avisado":row.error?"Falha no aviso":row.attempted_at?"Envio não confirmado":"Aguardando aviso")));
+  return li;
+ }));
+}
+async function refreshTechnical(){
+ try{renderTechnical(await call("/technical-mode"));}
+ catch{el("technicalToggle").disabled=true;text("technicalStatus","Não foi possível verificar o modo técnico.");}
+}
+el("technicalToggle").addEventListener("click",async()=>{
+ if(technicalBusy)return;
+ technicalBusy=true;el("technicalToggle").disabled=true;
+ try{renderTechnical(await call("/technical-mode",{method:"POST",headers:{"x-csrf-token":csrf},body:JSON.stringify({active:!technicalActive,hours:Number(el("technicalHours").value)})}));}
+ catch{text("technicalStatus","Não foi possível alterar. Atualize e tente novamente.");}
+ finally{technicalBusy=false;await refreshTechnical();}
+});
+setInterval(()=>{if(!el("appView").hidden&&!technicalBusy)void refreshTechnical();},30000);

@@ -45,6 +45,12 @@
   </header>
   <main class="content">
     <div class="welcome"><div><div class="eyebrow"><span class="tiny-dot"></span> CENTRAL DE OPERAÇÕES</div><h1>Bom trabalho, Leonardo<span class="wave">.</span></h1><p>Gerencie seus atendimentos com clareza, do primeiro contato à conclusão do serviço.</p></div><div class="welcome-action"><span id="lastUpdate">Atualizando dados...</span><button class="primary" id="openAllOrders">Ver ordens de serviço <span>↗</span></button></div></div>
+    <section class="workbench" id="technicalSection" aria-labelledby="technicalTitle">
+      <div class="panel-heading"><div><div class="eyebrow dark">CONTROLE DO WHATSAPP</div><h2 id="technicalTitle">Modo Atendimento Técnico</h2><p id="technicalStatus" role="status">Verificando status...</p></div></div>
+      <div class="panel-tools"><label for="technicalHours">Desativação automática</label><select id="technicalHours"><option value="1">1 hora</option><option value="2">2 horas</option><option value="4" selected>4 horas</option><option value="8">8 horas</option><option value="12">12 horas</option></select><button type="button" class="primary" id="technicalToggle" disabled>Iniciar atendimento técnico</button></div>
+      <p class="subtle">Uma resposta de ausência por contato, preservando números protegidos. O bot comercial volta ao normal ao finalizar.</p>
+      <details><summary id="technicalCount">Contatos aguardando retorno</summary><ul id="technicalWaiting"></ul></details>
+    </section>
     <section class="stat-grid" aria-label="Indicadores">
       <button class="stat-card selected" data-filter="todos"><span class="stat-top"><span class="stat-title">Total de solicitações</span><span class="stat-icon blue">▣</span></span><strong id="metricTotal">—</strong><span class="stat-foot"><span class="stat-mini">Todas</span> as solicitações</span></button>
       <button class="stat-card" data-filter="novo"><span class="stat-top"><span class="stat-title">Novos pedidos</span><span class="stat-icon purple">✳</span></span><strong id="metricNew">—</strong><span class="stat-foot"><span class="stat-mini">Aguardando</span> análise inicial</span></button>

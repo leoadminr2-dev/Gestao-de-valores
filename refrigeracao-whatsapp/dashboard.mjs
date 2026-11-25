@@ -115,6 +115,19 @@ export function createDashboard(pool,replyOptions={}){
   if(url.pathname==="/painel/api/me"&&req.method==="GET"){
    answer(res,200,{ok:true,csrf:auth.csrf});return true;
   }
+  if(url.pathname==="/painel/api/technical-mode"&&replyOptions.technical){
+   try{
+    if(req.method==="GET"){answer(res,200,await replyOptions.technical.snapshot());return true;}
+    if(req.method==="POST"){
+     if(!equal(req.headers["x-csrf-token"],auth.csrf)){answer(res,403,{error:"requisicao_nao_autorizada"});return true;}
+     const input=await bodyJSON(req);
+     if(typeof input.active!=="boolean"||(input.active&&(!Number.isInteger(input.hours)||input.hours<1||input.hours>12))){answer(res,400,{error:"duracao_invalida"});return true;}
+     answer(res,200,await replyOptions.technical.set(input.active,input.hours));return true;
+    }
+    answer(res,405,{error:"method_not_allowed"});
+   }catch(e){answer(res,503,{error:"modo_tecnico_indisponivel"});}
+   return true;
+  }
   if(url.pathname==="/painel/api/password"&&req.method==="POST"){
    if(!equal(req.headers["x-csrf-token"],auth.csrf)){answer(res,403,{error:"requisicao_nao_autorizada"});return true;}
    let input;try{input=await bodyJSON(req)}catch{answer(res,400,{error:"dados_invalidos"});return true;}
