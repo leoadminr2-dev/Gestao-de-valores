@@ -252,14 +252,17 @@ function nextDetail(data) {
   return data.servico?askEquipment(data):serviceQuestion;
 }
 
+const PAYMENT_METHODS = "💳 *Formas de pagamento*\n\n💳 Cartão de crédito\n💳 Cartão de débito\n📲 Pix";
+const PAYMENT_INTENT = /\b(?:cartao|credito|debito|pix|pagamento|parcel\w*)\b/;
+const PAYMENT_TERMS = /parcel|\bjuros\b|\btaxa[s]?\b|\bdesconto\b|\bchave pix\b|\b(?:em|ate)\s*\d+\s*(?:x|vezes)\b/;
 function serviceAnswer(t, service) {
   const answers=[];
   if (/nota fiscal|recibo|emite nota|emissao de nota/.test(t))
     answers.push("Sobre nota fiscal ou recibo, Leonardo confirma a forma de emissão antes do fechamento. Não vou prometer um documento sem essa confirmação.");
   if (/garantia/.test(t))
     answers.push("As condições e o prazo de garantia são informados conforme o serviço e registrados no orçamento. Leonardo confirma os detalhes antes da aprovação.");
-  if (/parcel|cartao|forma[s]? de pagamento|aceita pix|pagar no pix/.test(t))
-    answers.push("As formas de pagamento são confirmadas com Leonardo antes do serviço, sem compromisso até sua aprovação.");
+  if (PAYMENT_INTENT.test(t))
+    answers.push(PAYMENT_METHODS+(PAYMENT_TERMS.test(t)?"\n\nLeonardo confirma condições específicas, como parcelamento, taxas ou dados do Pix, antes do fechamento.":""));
   if (/atendem? (?:em |no |na )|area de atendimento|bairros? que atende/.test(t))
     answers.push("Podemos consultar a disponibilidade para o seu bairro antes de confirmar uma visita.");
   if (/horario de atendimento|atende domingo|atende sabado|tem horario/.test(t))
@@ -304,15 +307,15 @@ function beginService(data,raw,service,greet) {
 function quote(data) {
   const detail=norm(data.equipamento);
   if (data.servico.startsWith("Manutenção"))
-    return ["🔧 *Visita técnica*","🔎 Leonardo avalia o aparelho e identifica a causa do problema.","📋 Explicação do diagnóstico e apresentação do orçamento do reparo antes da execução.","💰 *Valor da visita · R$ 120,00*","✅ O valor da visita é abatido se você aprovar o conserto.","📦 Peças e mão de obra do reparo serão orçadas após o diagnóstico."].join("\n\n");
+    return ["🔧 *Visita técnica*","🔎 Leonardo avalia o aparelho e identifica a causa do problema.","📋 Explicação do diagnóstico e apresentação do orçamento do reparo antes da execução.","💰 *Valor da visita · R$ 120,00*","✅ O valor da visita é abatido se você aprovar o conserto.","📦 Peças e mão de obra do reparo serão orçadas após o diagnóstico.",PAYMENT_METHODS].join("\n\n");
   if (data.servico==="Instalação de ventilador de teto" || data.servico==="Instalação elétrica para ar-condicionado") return null;
   if (data.servico.startsWith("Instalação") && /fachada|andaime|rapel|precis[ao] (?:puxar|instalar) (?:o )?220/.test(detail)) return null;
   if (data.servico.startsWith("Instalação") && /split/.test(detail))
-    return ["❄️ *Instalação padrão de split*","Trabalhamos com instalação profissional, prezando pela segurança, eficiência e durabilidade do equipamento.","🔧 *Procedimentos inclusos:*","📍 Posicionamento e fixação das unidades interna e externa.","🔩 Interligação das tubulações frigoríficas.","⚡ Interligação elétrica entre as unidades.","💧 Instalação e teste do dreno.","🛡️ Teste de estanqueidade para verificar possíveis vazamentos.","🔬 Processo de vácuo para remover ar e umidade do sistema.","🌡️ Teste de funcionamento e conferência final.","━━━━━━━━━━━━━━━━","💰 *Investimento*","*Mão de obra estimada · R$ 650,00 por aparelho*","📦 O cliente fornece o aparelho e os materiais. Podemos também orçar o fornecimento dos materiais.","🛠️ Acesso especial e adequação elétrica exigem avaliação separada."].join("\n\n");
+    return ["❄️ *Instalação padrão de split*","Trabalhamos com instalação profissional, prezando pela segurança, eficiência e durabilidade do equipamento.","🔧 *Procedimentos inclusos:*","📍 Posicionamento e fixação das unidades interna e externa.","🔩 Interligação das tubulações frigoríficas.","⚡ Interligação elétrica entre as unidades.","💧 Instalação e teste do dreno.","🛡️ Teste de estanqueidade para verificar possíveis vazamentos.","🔬 Processo de vácuo para remover ar e umidade do sistema.","🌡️ Teste de funcionamento e conferência final.","━━━━━━━━━━━━━━━━","💰 *Investimento*","*Mão de obra estimada · R$ 650,00 por aparelho*","📦 O cliente fornece o aparelho e os materiais. Podemos também orçar o fornecimento dos materiais.","🛠️ Acesso especial e adequação elétrica exigem avaliação separada.",PAYMENT_METHODS].join("\n\n");
   if (data.servico.startsWith("Limpeza") && /acesso dificil|dificil acesso|fachada|andaime|rapel|nao (?:e |tem )?(?:de )?facil acesso/.test(detail)) return null;
   if (data.servico.startsWith("Limpeza") && /janela|split/.test(detail)) {
     const unit=/janela/.test(detail)?"R$ 250,00":/\b9\s*(mil|k|[., ]?000)\b/.test(detail)?"R$ 280,00":"";
-    if (unit) return "❄️ *Higienização profunda de ar-condicionado*\n\n"+cleaningProcedure(detail)+"\n\n━━━━━━━━━━━━━━━━\n\n💰 *Investimento · "+unit+" por aparelho*";
+    if (unit) return "❄️ *Higienização profunda de ar-condicionado*\n\n"+cleaningProcedure(detail)+"\n\n━━━━━━━━━━━━━━━━\n\n💰 *Investimento · "+unit+" por aparelho*\n\n"+PAYMENT_METHODS;
   }
   return null;
 }
@@ -509,7 +512,7 @@ function advanceCore(session, incoming) {
   Object.assign(data,supplied);
   const topic=data.servico || serviceType(t);
   const conditions=[];
-  if (/parcel|cartao|forma[s]? de pagamento|aceita pix|pagar no pix/.test(t)) conditions.push("as condições de pagamento");
+  if (PAYMENT_INTENT.test(t) && PAYMENT_TERMS.test(t)) conditions.push("as condições de pagamento");
   if (/nota fiscal|recibo|emite nota|emissao de nota/.test(t)) conditions.push("a documentação fiscal");
   if (/atende domingo|atende sabado|horario de atendimento/.test(t)) conditions.push("a disponibilidade de horário");
   if (/garantia/.test(t)) conditions.push("a garantia");
@@ -522,6 +525,10 @@ function advanceCore(session, incoming) {
   if ((conditions.length || partial) && (intake || data.guided) && !["venda_valor","venda_negociavel"].includes(stage)){
     const pending=conditions.length?"a confirmação sobre "+conditions.join(" e "):"a outra dúvida da sua mensagem";
     return {stage,mode:"human",data:{...data,servico:topic,duvidaCliente:raw},reply:[stage==="menu"?welcome:"",known,"Vou deixar com Leonardo "+pending+". Ele continua por aqui com os detalhes que você já enviou."].filter(Boolean).join("\n\n")};
+  }
+  if (PAYMENT_INTENT.test(t) && !PAYMENT_TERMS.test(t) && !marketIntent(t) && !["venda_midia","venda_valor","venda_negociavel"].includes(stage) && (/^(?:pix|credito|debito|cartao(?: de (?:credito|debito))?|formas? de pagamento)[?!. ]*$/.test(t) || /\b(?:aceita[m]?|recebe[m]?|pagar|pagamento|passa[m]?|trabalha[m]? com)\b/.test(t))) {
+    const resume={menu:serviceQuestion,assunto:serviceQuestion,nome:nameQuestion,bairro_inicial:neighborhoodQuestion,necessidade:serviceQuestion,aceite_orcamento:"Quer seguir com a solicitação?",endereco_final:addressQuestion};
+    return {stage,mode,data,reply:PAYMENT_METHODS+(resume[stage]?"\n\n"+resume[stage]:"")};
   }
   if(stage==="venda_midia"){
     const m=incoming?.media;
@@ -717,7 +724,7 @@ export function advance(session,incoming) {
   let result;
   const t=norm(incoming?.text);
   const stage=session?.stage||"menu";
-  if(incoming?.technicalMode && (session?.mode||"bot")==="bot" && !session?.data?.handoffPending && ["menu","tecnico_nome"].includes(stage) && (!incoming?.type || incoming.type==="text") && !isCommercialIntent(t) && !marketIntent(t) && !/^(menu|inicio|reiniciar|0|[1-9]|cancelar|desistir|cancela|humano|atendente|responsavel)$/.test(t) && !/cheiro de queimado|fumaca|faisca|choque eletrico|incendio|vazamento de gas|cheiro (?:forte )?de gas|falar com|nota fiscal|desconto|garantia|parcel|cartao/.test(t)){
+  if(incoming?.technicalMode && (session?.mode||"bot")==="bot" && !session?.data?.handoffPending && ["menu","tecnico_nome"].includes(stage) && (!incoming?.type || incoming.type==="text") && !isCommercialIntent(t) && !marketIntent(t) && !PAYMENT_INTENT.test(t) && !/^(menu|inicio|reiniciar|0|[1-9]|cancelar|desistir|cancela|humano|atendente|responsavel)$/.test(t) && !/cheiro de queimado|fumaca|faisca|choque eletrico|incendio|vazamento de gas|cheiro (?:forte )?de gas|falar com|nota fiscal|desconto|garantia|parcel|cartao/.test(t)){
     const data={...(session?.data||{})};
     const name=String(incoming?.text||"").trim();
     Object.assign(data,contactDetails(name));
