@@ -3,6 +3,60 @@ import crypto from 'node:crypto';
 import {readFileSync} from 'node:fs';
 const homeHtml=readFileSync(new URL('./home.html',import.meta.url),'utf8');
 
+
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+const runSpeech=promisify(execFile);
+const speechRoot=fileURLToPath(new URL('./.speech/',import.meta.url));
+const speechBin=join(speechRoot,'whisper/build/bin/whisper-cli');
+const speechModel=join(speechRoot,'ggml-tiny-q5_1.bin');
+const speechReady=()=>existsSync(speechBin)&&existsSync(speechModel);
+const speechEnv={PATH:process.env.PATH||'/usr/bin:/bin',LANG:'C.UTF-8',HOME:tmpdir()};
+const maxAudioBytes=2*1024*1024;
+let audioBusy=false;
+const audioInFlight=new Set();
+export async function transcribeAudio(env,mediaId,fetcher=fetch){
+  if(!speechReady())throw Error('Speech engine unavailable');
+  if(!/^\d{1,40}$/.test(String(mediaId)))throw Error('Invalid audio ID');
+  const headers={authorization:'Bearer '+env.META_ACCESS_TOKEN};
+  const graph='https://graph.facebook.com/'+(env.GRAPH_API_VERSION||'v24.0')+'/';
+  const meta=await fetcher(graph+encodeURIComponent(mediaId)+'?phone_number_id='+encodeURIComponent(env.META_PHONE_NUMBER_ID),{headers,signal:AbortSignal.timeout(10000),redirect:'error'});
+  if(!meta.ok)throw Error('Audio metadata HTTP '+meta.status);
+  const info=await meta.json();
+  if(!/^audio\//i.test(info.mime_type||'')||Number(info.file_size)>maxAudioBytes)throw Error('Audio unsupported or too large');
+  const url=new URL(info.url);
+  if(url.protocol!=='https:'||url.hostname!=='lookaside.fbsbx.com'||url.username||url.password||url.port)throw Error('Invalid media host');
+  const res=await fetcher(url,{headers,signal:AbortSignal.timeout(15000),redirect:'error'});
+  if(!res.ok||!res.body)throw Error('Audio download HTTP '+res.status);
+  let size=0;const chunks=[];
+  for await(const chunk of res.body){size+=chunk.length;if(size>maxAudioBytes)throw Error('Audio too large');chunks.push(Buffer.from(chunk));}
+  if(!size)throw Error('Empty audio');
+  const dir=await mkdtemp(join(tmpdir(),'romeu-audio-'));
+  try{
+    const source=join(dir,'voice.ogg'),wav=join(dir,'voice.wav'),out=join(dir,'transcript');
+    await writeFile(source,Buffer.concat(chunks));
+    const probe=await runSpeech('ffprobe',['-v','error','-show_entries','format=duration','-of','default=noprint_wrappers=1:nokey=1',source],{timeout:10000,env:speechEnv});
+    const seconds=Number(probe.stdout.trim());
+    if(!Number.isFinite(seconds)||seconds<=0||seconds>45)throw Error('Audio duration exceeds 45 seconds');
+    await runSpeech('ffmpeg',['-nostdin','-v','error','-i',source,'-t','45','-vn','-ac','1','-ar','16000','-c:a','pcm_s16le',wav],{timeout:15000,env:speechEnv});
+    await runSpeech(speechBin,['-m',speechModel,'-f',wav,'-l','pt','-t','1','-nt','-otxt','-of',out,'-ng'],{timeout:90000,maxBuffer:1024*1024,env:speechEnv});
+    const transcript=(await readFile(out+'.txt','utf8')).trim().replace(/\s+/g,' ').slice(0,1500);
+    if(!transcript||!/[\p{L}\p{N}]/u.test(transcript))throw Error('No speech recognized');
+    return transcript;
+  }finally{await rm(dir,{recursive:true,force:true});}
+}
+export function audioCommand(transcript){
+  const cmd=parse(transcript);
+  if(cmd.action==='create')return {action:'audioConfirm',transcript};
+  if(cmd.action==='unknown')return {action:'audioUnknown',transcript};
+  return {...cmd,transcript};
+}
+
 const maxBytes=128*1024;
 export const envConfig=()=>process.env;
 const json=(status,obj)=>new Response(JSON.stringify(obj),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
@@ -74,6 +128,7 @@ export function parse(input){
   const quote=parseQuote(phrase);
   if(quote)return String(input).trim().length>1500 ? {action:'quoteGuide'} : quote;
   if(!s)return {action:'unknown'};
+  if(/(?:como (?:posso|devo) (?:te chamar|chamar voce)|qual (?:e )?(?:o )?seu nome|quem (?:e )?voce)/.test(s))return {action:'identity'};
   if(/^(?:quais (?:sao )?(?:as )?formas de pagamento|formas de pagamento|(?:voces? )?aceita(?:m)? (?:cartao(?: de (?:credito|debito))?|pix|credito|debito))[?!. ]*$/.test(s))return {action:'paymentMethods'};
   if(/^(ajuda|menu|oi|ola|iniciar|start)\b/.test(s))return {action:'help'};
   if(/^(resumo|status|saldo)\b/.test(s))return {action:'summary'};
@@ -94,6 +149,10 @@ export function parse(input){
   return {action:'unknown'};
 }
 export function reply(cmd,data={}){
+  if(cmd.action==='identity')return '🤖 Pode me chamar de Romeu! Sou seu assistente pessoal para orçamentos, tarefas e gestão dos serviços.';
+  if(cmd.action==='audioConfirm')return '🎙️ Entendi: '+cmd.transcript+'\n\nPara evitar registros incorretos, confirme enviando essa instrução por texto. Ainda não salvei o registro.';
+  if(cmd.action==='audioUnknown')return '🎙️ Entendi: '+cmd.transcript+'\n\nAinda não consegui identificar a ação. Pode detalhar o pedido?';
+  if(cmd.action==='audioError')return '🎙️ Não consegui transcrever esse áudio. Tente uma mensagem de até 45 segundos ou envie por texto.';
   if(cmd.action==='comparisonReply')return COMPARISON_REPLY;
   if(cmd.action==='quote')return quoteDraft(cmd);
   if(cmd.action==='paymentMethods')return PAYMENT_METHODS;
@@ -169,18 +228,18 @@ export async function sendToMeta(env,to,body,messageId,fetcher=fetch){
     return {sent:true};
   }finally{clearTimeout(timer);}
 }
-export function createHandler(env,{store,send=sendToMeta}={}){
+export function createHandler(env,{store,send=sendToMeta,transcribe=transcribeAudio}={}){
   const allowed=new Set((env.AUTHORIZED_NUMBERS||'').split(',').map(n=>n.replace(/\D/g,'')).filter(Boolean));
   const ready=()=>!!(env.META_VERIFY_TOKEN&&env.META_APP_SECRET&&env.META_ACCESS_TOKEN&&env.META_PHONE_NUMBER_ID&&env.DATABASE_URL&&allowed.size);
   return async function handle(request){
     const url=new URL(request.url);
     if (url.pathname === '/privacidade' && ['GET', 'HEAD'].includes(request.method)) {
-      return new Response(request.method === 'HEAD' ? null : "<!doctype html><html lang=\"pt-BR\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Política de privacidade do Romeu</title><main style=\"max-width:44rem;margin:3rem auto;padding:0 1rem;font:1.1rem/1.55 system-ui\"><h1>Política de privacidade do Romeu</h1><p>Atualizada em 26 de novembro de 2026.</p><p>Leonardo Moreira é o responsável pelo Romeu, assistente pessoal de uso restrito pelo WhatsApp.</p><h2>Dados e finalidade</h2><p>O serviço recebe da Meta o número do remetente, identificadores da mensagem e o conteúdo enviado. Usa esses dados para verificar se o número está autorizado, interpretar pedidos, responder e evitar processamento duplicado. Os registros criados por comando podem conter nomes de clientes, descrições, valores e anotações fornecidos pelo usuário. O serviço também guarda identificadores, estados de processamento e contadores de uso.</p><h2>Processamento e conservação</h2><p>A Meta transporta as mensagens pelo WhatsApp, o Render hospeda o aplicativo e o Neon armazena os registros. Os provedores podem processar dados em outros países. Os registros do assistente ficam armazenados para consulta. Uma solicitação de exclusão será avaliada considerando a identificação do solicitante, os dados envolvidos e eventuais obrigações de conservação.</p><h2>Contato e direitos</h2><p>Para saber se há dados seus, pedir acesso, correção ou exclusão, fale com Leonardo Moreira pelo atendimento humano da Leonardo Moreira Refrigeração no WhatsApp. Identifique o pedido como “Privacidade do Romeu” e informe apenas os dados necessários para localizar o registro. Você também pode recorrer à Autoridade Nacional de Proteção de Dados.</p></main></html>", {
+      return new Response(request.method === 'HEAD' ? null : "<!doctype html><html lang=\"pt-BR\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Política de privacidade do Romeu</title><main style=\"max-width:44rem;margin:3rem auto;padding:0 1rem;font:1.1rem/1.55 system-ui\"><h1>Política de privacidade do Romeu</h1><p>Atualizada em 26 de novembro de 2026.</p><p>Leonardo Moreira é o responsável pelo Romeu, assistente pessoal de uso restrito pelo WhatsApp.</p><h2>Dados e finalidade</h2><p>O serviço recebe da Meta o número do remetente, identificadores da mensagem e o conteúdo enviado. Usa esses dados para verificar se o número está autorizado, interpretar pedidos, responder e evitar processamento duplicado. Os registros criados por comando podem conter nomes de clientes, descrições, valores e anotações fornecidos pelo usuário. O serviço também guarda identificadores, estados de processamento e contadores de uso. Áudios são transcritos localmente no servidor; os arquivos temporários são excluídos após o processamento.</p><h2>Processamento e conservação</h2><p>A Meta transporta as mensagens pelo WhatsApp, o Render hospeda o aplicativo e o Neon armazena os registros. Os provedores podem processar dados em outros países. Os registros do assistente ficam armazenados para consulta. Uma solicitação de exclusão será avaliada considerando a identificação do solicitante, os dados envolvidos e eventuais obrigações de conservação.</p><h2>Contato e direitos</h2><p>Para saber se há dados seus, pedir acesso, correção ou exclusão, fale com Leonardo Moreira pelo atendimento humano da Leonardo Moreira Refrigeração no WhatsApp. Identifique o pedido como “Privacidade do Romeu” e informe apenas os dados necessários para localizar o registro. Você também pode recorrer à Autoridade Nacional de Proteção de Dados.</p></main></html>", {
         headers: {'content-type': 'text/html; charset=utf-8', 'x-content-type-options': 'nosniff'}
       });
     }
     if(url.pathname==='/'&&request.method==='GET')return new Response(homeHtml,{status:200,headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','content-security-policy':"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'; frame-ancestors 'none'"}});
-    if(url.pathname==='/health'&&request.method==='GET')return json(200,{service:'romeu-whatsapp',version:'0.3.0',status:ready()&&env.OUTBOUND_ENABLED==='true'?'configured':'ready_for_setup',outbound:env.OUTBOUND_ENABLED==='true',meta_configured:!!(env.META_VERIFY_TOKEN&&env.META_APP_SECRET&&env.META_ACCESS_TOKEN&&env.META_PHONE_NUMBER_ID),database_configured:!!env.DATABASE_URL,allowlist_configured:allowed.size>0});
+    if(url.pathname==='/health'&&request.method==='GET')return json(200,{service:'romeu-whatsapp',version:'0.3.0',status:ready()&&env.OUTBOUND_ENABLED==='true'?'configured':'ready_for_setup',outbound:env.OUTBOUND_ENABLED==='true',meta_configured:!!(env.META_VERIFY_TOKEN&&env.META_APP_SECRET&&env.META_ACCESS_TOKEN&&env.META_PHONE_NUMBER_ID),database_configured:!!env.DATABASE_URL,allowlist_configured:allowed.size>0,audio_configured:speechReady()});
     if(url.pathname!=='/webhook')return json(404,{error:'not found'});
     if(request.method==='GET')return url.searchParams.get('hub.mode')==='subscribe'&&equal(url.searchParams.get('hub.verify_token'),env.META_VERIFY_TOKEN)&&url.searchParams.has('hub.challenge')
       ?new Response(url.searchParams.get('hub.challenge'),{status:200,headers:{'content-type':'text/plain'}}):json(403,{error:'invalid verification'});
@@ -197,15 +256,26 @@ export function createHandler(env,{store,send=sendToMeta}={}){
       if(value.metadata?.phone_number_id!==env.META_PHONE_NUMBER_ID){ignored++;continue;}
       for(const m of (value.messages||[]).slice(0,20)){
         const from=String(m.from||'').replace(/\D/g,'');
-        if(!allowed.has(from)||m.type!=='text'||!m.id||!m.text?.body||env.OUTBOUND_ENABLED!=='true'||!ready()||!store){ignored++;continue;}
-        const cmd=parse(m.text.body);
+        const isAudio=m.type==='audio'&&!!m.audio?.id;
+        if(!allowed.has(from)||!m.id||!(isAudio||(m.type==='text'&&m.text?.body))||env.OUTBOUND_ENABLED!=='true'||!ready()||!store){ignored++;continue;}
+        if(isAudio&&(audioInFlight.has(m.id)||audioBusy)){
+          if(!audioInFlight.has(m.id))errors++;else ignored++;
+          continue;
+        }
+        if(isAudio){audioBusy=true;audioInFlight.add(m.id);}
         try{
+          let cmd;
+          if(isAudio){
+            try{cmd=audioCommand(await transcribe(env,m.audio.id));}
+            catch{cmd={action:'audioError'};console.warn('ROMEU audio transcription failed');}
+          }else cmd=parse(m.text.body);
           const r=await store.process({from,messageId:m.id,cmd,limit:Math.min(800,Math.max(1,Number(env.MAX_MONTHLY_REPLIES)||800))});
           if(r.skip){ignored++;continue;}
-          await send(env,from,reply(cmd,r.data),m.id);
+          const response=reply(cmd,r.data);
+          await send(env,from,isAudio&&cmd.transcript&&!['audioConfirm','audioUnknown'].includes(cmd.action)?'🎙️ Entendi: '+cmd.transcript+'\n\n'+response:response,m.id);
           await store.markSent?.(m.id);
           accepted++;
-        }catch(e){errors++;console.error('Webhook processing failed:',String(e?.message||e).replace(/Bearer\s+\S+/gi,'Bearer ***'));}
+        }catch(e){errors++;console.error('Webhook processing failed:',String(e?.message||e).replace(/Bearer\s+\S+/gi,'Bearer ***'));}finally{if(isAudio){audioInFlight.delete(m.id);audioBusy=false;}}
       }
     }
     console.info('ROMEU webhook processed',JSON.stringify({accepted,ignored,errors}));
