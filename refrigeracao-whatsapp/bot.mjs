@@ -28,6 +28,8 @@ export const MENU = [
 ].join("\n");
 
 export const norm = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+const COMPARISON_INTENT = /(?:\b(?:outros?|novos?|mais|demais)\s+(?:\w+\s+){0,2}(?:orcamentos?|cotacoes?|propostas?)\b|\b(?:pesquis\w*|compar\w*|busc\w*|procur\w*|peg\w*|faz\w*|solicit\w*|levant\w*|consult\w*)\s+(?:\w+\s+){0,4}(?:orcamentos|cotacoes|precos|valores|propostas)\b|\b(?:orcamento|cotacao|preco|valor)\s+(?:de|com|em)\s+outr[oa]s?\b)/;
+const COMPARISON_REPLY = "Entendemos perfeitamente! 😊\n\nÉ importante, sim, pesquisar e comparar orçamentos antes de contratar um serviço.\n\n⭐ *Confira nossas avaliações no Google:*\nhttps://share.google/QTqpyBWNP4QKaFm7C\n\nSão feedbacks de clientes que contrataram nossos serviços de instalação, higienização (lavação) e manutenção.\n\n🌐 *Conheça também nossa página:*\nhttps://headless-qqhigtkprnz-leoadminr2-140a.wix-site-host.com/\n\nPrezamos pela qualidade, pelos procedimentos técnicos, pela transparência e pela garantia dos nossos serviços.\n\nEstamos à disposição! 🤝\n\n❄️ *Leonardo Moreira Refrigeração*";
 const HUMAN_REPLY = "👨‍🔧 Você será direcionado para falar com *Leonardo Moreira*, técnico responsável pela manutenção.\n\nPor favor, descreva brevemente sua necessidade. Assim, poderemos dar continuidade ao seu atendimento com mais agilidade.\n\nPara voltar ao atendimento automático, digite *MENU*.";
 const RESIDENTIAL_MENU = "🏠 *Atendimento residencial*\n\n1️⃣ *Instalação de ar-condicionado*\n\n2️⃣ *Manutenção e consertos*\n\n3️⃣ *Limpeza profunda*\n\nResponda com o número ou conte seu problema.\nDigite *0* para voltar.";
 const BUSINESS_MENU = "🏢 *Atendimento para empresas*\n\n1️⃣ *Manutenção e consertos*\n\n2️⃣ *Limpeza profunda*\n\n3️⃣ *Contrato preventivo e periódico*\n\nResponda com o número ou descreva sua necessidade.\nDigite *0* para voltar.";
@@ -507,6 +509,7 @@ function advanceCore(session, incoming) {
     return {stage:"menu",mode:"bot",data:{},reply:"Tudo bem, sem problema. Não registrei nenhum novo pedido.\n\n"+MENU};
   if(/cheiro de queimado|fumaca|faisca|choque eletrico|principio de incendio|cheiro (?:forte )?de gas|vazamento de gas|r600a.*vazando/.test(t))
     return {stage,mode:"human",data,reply:"⚠️ *Prioridade: segurança.* Pare de utilizar o equipamento. Se houver suspeita de vazamento de gás refrigerante, afaste fontes de chama e evite acionar interruptores próximos. Se for seguro, interrompa a alimentação elétrica; em caso de fumaça, fogo ou risco imediato, acione a emergência. Não tente abrir ou reparar o aparelho. Vou direcionar seu relato ao Leonardo."};
+  if (COMPARISON_INTENT.test(t)) return {stage,mode,data,reply:COMPARISON_REPLY};
   const intake=["menu","encerrado","assunto","nome","bairro_inicial","necessidade","mercado","eletro_escolha"].includes(stage);
   const supplied=intake?contactDetails(raw):{};
   Object.assign(data,supplied);
@@ -724,7 +727,7 @@ export function advance(session,incoming) {
   let result;
   const t=norm(incoming?.text);
   const stage=session?.stage||"menu";
-  if(incoming?.technicalMode && (session?.mode||"bot")==="bot" && !session?.data?.handoffPending && ["menu","tecnico_nome"].includes(stage) && (!incoming?.type || incoming.type==="text") && !isCommercialIntent(t) && !marketIntent(t) && !PAYMENT_INTENT.test(t) && !/^(menu|inicio|reiniciar|0|[1-9]|cancelar|desistir|cancela|humano|atendente|responsavel)$/.test(t) && !/cheiro de queimado|fumaca|faisca|choque eletrico|incendio|vazamento de gas|cheiro (?:forte )?de gas|falar com|nota fiscal|desconto|garantia|parcel|cartao/.test(t)){
+  if(incoming?.technicalMode && (session?.mode||"bot")==="bot" && !session?.data?.handoffPending && ["menu","tecnico_nome"].includes(stage) && (!incoming?.type || incoming.type==="text") && !isCommercialIntent(t) && !COMPARISON_INTENT.test(t) && !marketIntent(t) && !PAYMENT_INTENT.test(t) && !/^(menu|inicio|reiniciar|0|[1-9]|cancelar|desistir|cancela|humano|atendente|responsavel)$/.test(t) && !/cheiro de queimado|fumaca|faisca|choque eletrico|incendio|vazamento de gas|cheiro (?:forte )?de gas|falar com|nota fiscal|desconto|garantia|parcel|cartao/.test(t)){
     const data={...(session?.data||{})};
     const name=String(incoming?.text||"").trim();
     Object.assign(data,contactDetails(name));
