@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node app.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "pretest": "if [ \"$RENDER\" = \"true\" ]; then set -e; mkdir -p .speech; if [ ! -x .speech/whisper/build/bin/whisper-cli ]; then rm -rf .speech/whisper; git clone --depth 1 --branch v1.7.5 https://github.com/ggml-org/whisper.cpp.git .speech/whisper; cmake -S .speech/whisper -B .speech/whisper/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DWHISPER_BUILD_TESTS=OFF; cmake --build .speech/whisper/build --target whisper-cli -j 2; fi; if [ ! -f .speech/ggml-tiny-q5_1.bin ]; then curl -fL --retry 2 --max-time 180 https://huggingface.co/ggerganov/whisper.cpp/resolve/0b364b566045a405be7225ee1e415a073e04da77/ggml-tiny-q5_1.bin -o .speech/ggml-tiny-q5_1.bin.tmp; mv .speech/ggml-tiny-q5_1.bin.tmp .speech/ggml-tiny-q5_1.bin; fi; echo '2827a03e495b1ed3048ef28a6a4620537db4ee51  .speech/ggml-tiny-q5_1.bin' | sha1sum -c -; ffmpeg -version >/dev/null; ffprobe -version >/dev/null; echo 'ROMEU speech engine installed'; fi"
   },
   "engines": {
     "node": ">=20"
