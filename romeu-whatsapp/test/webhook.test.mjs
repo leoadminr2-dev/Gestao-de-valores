@@ -72,3 +72,22 @@ test('referências de preço restritas ao serviço definido',()=>{
   assert.match(reply(parse('Orçamento para Ana: 1 limpeza de ar de janela')),/250,00/);
   assert.equal(parse('Orçamento para Ana: 2 higienizações de split de 24.000 BTUs').action,'quoteGuide');
 });
+
+
+test('orçamentos pessoais apresentam procedimentos, espaçamento e pagamentos sem alterar totais',()=>{
+  const draft=reply(parse('Orçamento para Juliana\n1 x Instalação de split | R$ 650,00\n1 x Material | R$ 300,00'));
+  assert.match(draft,/🔧|📍/u);
+  assert.match(draft,/Teste de estanqueidade/);
+  assert.match(draft,/\n\n🔬 Vácuo/u);
+  assert.match(draft,/Total: R\$\s950,00/);
+  assert.match(draft,/Cartão de crédito\n💳 Cartão de débito\n📲 Pix/u);
+  assert.ok(draft.indexOf('Teste de estanqueidade') < draft.indexOf('Total:'));
+  const clean=reply(parse('Orçamento pra Ana: duas higienizações de split de 9.000 BTUs'));
+  assert.match(clean,/Lavagem individual/);
+  assert.match(clean,/Total: R\$\s560,00/);
+  const generic=reply(parse('Orçamento para Ana\n1 x Material | R$ 50,00'));
+  assert.doesNotMatch(generic,/Teste de estanqueidade|Lavagem individual/);
+  assert.match(generic,/Cartão de débito/);
+  assert.equal(parse('Romeu, aceita Pix?').action,'paymentMethods');
+  assert.match(reply(parse('Quais são as formas de pagamento?')),/📲 Pix/u);
+});
