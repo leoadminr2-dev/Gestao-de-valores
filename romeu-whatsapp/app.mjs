@@ -45,10 +45,23 @@ function parseQuote(phrase) {
   }
   return {action:'quote', client:header[1].trim(), items};
 }
+const PAYMENT_METHODS = '💳 *FORMAS DE PAGAMENTO*\n\n💳 Cartão de crédito\n💳 Cartão de débito\n📲 Pix';
+const quoteNorm = value => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+function quoteProcedures(items) {
+  const descriptions = items.map(i=>quoteNorm(i.description));
+  const blocks = [];
+  if (descriptions.some(t=>/instalacao/.test(t) && /split/.test(t) && !/desinstalacao|retirada|eletrica|somente|apenas|parcial|fachada|rapel/.test(t))) {
+    blocks.push(['❄️ *Instalação de split — procedimentos padrão*','📍 Posicionamento e fixação das unidades interna e externa.','🔩 Interligação das tubulações frigoríficas.','⚡ Interligação elétrica entre as unidades.','💧 Instalação e teste do dreno.','🛡️ Teste de estanqueidade para verificar vazamentos.','🔬 Vácuo para remover ar e umidade do sistema.','🌡️ Teste de funcionamento e conferência final.','📦 Materiais, adequação elétrica e acesso especial somente quando expressamente incluídos no orçamento.'].join('\n\n'));
+  }
+  if (descriptions.some(t=>/(higienizac|limpeza)/.test(t) && /split|ar[ -]condicionado|ar de janela/.test(t) && !/filtro|superficial|somente|apenas|parcial/.test(t))) {
+    blocks.push(['🧼 *Higienização — procedimentos padrão*','🔧 Desmontagem das partes necessárias do equipamento.','💧 Lavagem individual dos componentes laváveis.','❄️ Higienização da serpentina e da evaporadora, conforme o tipo de equipamento.','🌀 Limpeza da condensadora quando incluída e acessível.','✅ Montagem, conferência e teste de funcionamento.'].join('\n\n'));
+  }
+  return blocks;
+}
 function quoteDraft(cmd) {
-  const lines = cmd.items.map(i => '• '+i.description+' — '+i.count+' × '+price(i.cents)+' = '+price(i.count*i.cents));
+  const lines = cmd.items.map(i => '🔹 '+i.description+'\n'+i.count+' × '+price(i.cents)+' = '+price(i.count*i.cents));
   const total = cmd.items.reduce((sum,i)=>sum+i.count*i.cents,0);
-  return ['Rascunho para sua revisão 👇','','*Leonardo Moreira Refrigeração*',cmd.client?'Olá, '+cmd.client+'! Tudo bem? Segue o orçamento solicitado.':'Olá! Tudo bem? Segue o orçamento solicitado.', ...lines, '*Total: '+price(total)+'*','Qualquer dúvida, estou à disposição!'].join('\n');
+  return ['Rascunho para sua revisão 👇','❄️ *Leonardo Moreira Refrigeração*',cmd.client?'😊 Olá, '+cmd.client+'! Tudo bem? Segue o orçamento solicitado.':'😊 Olá! Tudo bem? Segue o orçamento solicitado.','Prezamos pela qualidade, segurança e clareza em cada serviço.',...quoteProcedures(cmd.items),'━━━━━━━━━━━━━━━━','📋 *Serviços e materiais*',...lines,'💰 *Total: '+price(total)+'*','━━━━━━━━━━━━━━━━',PAYMENT_METHODS,'🤝 Qualquer dúvida, estou à disposição!'].join('\n\n');
 }
 
 export function parse(input){
@@ -58,6 +71,7 @@ export function parse(input){
   const quote=parseQuote(phrase);
   if(quote)return String(input).trim().length>1500 ? {action:'quoteGuide'} : quote;
   if(!s)return {action:'unknown'};
+  if(/^(?:quais (?:sao )?(?:as )?formas de pagamento|formas de pagamento|(?:voces? )?aceita(?:m)? (?:cartao(?: de (?:credito|debito))?|pix|credito|debito))[?!. ]*$/.test(s))return {action:'paymentMethods'};
   if(/^(ajuda|menu|oi|ola|iniciar|start)\b/.test(s))return {action:'help'};
   if(/^(resumo|status|saldo)\b/.test(s))return {action:'summary'};
   if(/^(tarefas|minhas tarefas|listar tarefas)\b/.test(s))return {action:'tasks'};
@@ -78,6 +92,7 @@ export function parse(input){
 }
 export function reply(cmd,data={}){
   if(cmd.action==='quote')return quoteDraft(cmd);
+  if(cmd.action==='paymentMethods')return PAYMENT_METHODS;
   if(cmd.action==='quoteGuide')return 'Preciso do cliente, da descrição, da quantidade e do preço por unidade para calcular. '+quoteExample;
   if(cmd.action==='help')return '🤖 *ROMEU — Minha Vida em Dia*\n\nComandos:\n• orçamento para Carol: 2 x higienização | R$ 280 cada\n• tarefa levar o carro\n• comprar café e arroz\n• gastei R$ 80 com combustível\n• recebi R$ 120 de cliente\n• anotar reunião\n• tarefas\n• resumo';
   if(cmd.action==='create')return '✅ '+({task:'Tarefa',expense:'Despesa',income:'Recebimento',shopping:'Compra',note:'Nota',idea:'Ideia',study:'Estudo'}[cmd.kind]||'Registro')+' salvo: '+cmd.content+(cmd.amount?' — R$ '+cmd.amount.toFixed(2).replace('.',','):'');
