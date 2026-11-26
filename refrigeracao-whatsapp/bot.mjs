@@ -201,9 +201,9 @@ function cleaningProcedure(detail="") {
   const t=norm(detail);
   if (/janela|split|ar[ -]?condicionado/.test(t)) {
     const units=/janela/.test(t)?"higienização das serpentinas evaporadora e condensadora":"higienização da evaporadora e da condensadora";
-    return "Nossa higienização é profunda, não se resume à limpeza dos filtros. Realizamos a desmontagem técnica dos componentes laváveis, a lavagem individual das peças, "+units+", limpeza dos filtros, turbina ou ventilador, bandeja e drenagem, com proteção dos componentes elétricos e eletrônicos. Depois remontamos o equipamento e testamos o funcionamento. Esse cuidado ajuda a recuperar a circulação de ar, a eficiência da refrigeração e a reduzir odores causados pela sujeira.";
+    return ["Nossa higienização é profunda, não se resume à limpeza dos filtros.","🔧 *Procedimentos inclusos:*","🛠️ Desmontagem técnica dos componentes laváveis.","🧼 Lavagem individual das peças.","❄️ "+units.charAt(0).toUpperCase()+units.slice(1)+".","💨 Limpeza dos filtros, turbina ou ventilador.","💧 Limpeza da bandeja e drenagem.","🛡️ Proteção dos componentes elétricos e eletrônicos.","✅ Remontagem e teste de funcionamento.","🌿 Esse cuidado ajuda a recuperar a circulação de ar, a eficiência da refrigeração e a reduzir odores causados pela sujeira."].join("\n\n");
   }
-  return "Nossa limpeza é técnica e completa, com desmontagem dos componentes laváveis, higienização individual das peças e dos componentes adequados ao tipo de equipamento, proteção da parte elétrica, remontagem e teste de funcionamento. O procedimento é definido conforme o aparelho e as condições de acesso.";
+  return ["Nossa limpeza é técnica e completa.","🛠️ Desmontagem dos componentes laváveis.","🧼 Higienização individual das peças e dos componentes adequados ao tipo de equipamento.","🛡️ Proteção da parte elétrica.","✅ Remontagem e teste de funcionamento.","📋 O procedimento é definido conforme o aparelho e as condições de acesso."].join("\n\n");
 }
 function explainService(service) {
   if (service==="Instalação de ventilador de teto")
@@ -304,15 +304,15 @@ function beginService(data,raw,service,greet) {
 function quote(data) {
   const detail=norm(data.equipamento);
   if (data.servico.startsWith("Manutenção"))
-    return "*Visita técnica*\nLeonardo avalia o aparelho e identifica a causa do problema.\n*Valor da visita · R$ 120,00* O valor da visita é abatido se você aprovar o conserto. Peças e mão de obra do reparo serão orçadas após o diagnóstico.";
+    return ["🔧 *Visita técnica*","🔎 Leonardo avalia o aparelho e identifica a causa do problema.","📋 Explicação do diagnóstico e apresentação do orçamento do reparo antes da execução.","💰 *Valor da visita · R$ 120,00*","✅ O valor da visita é abatido se você aprovar o conserto.","📦 Peças e mão de obra do reparo serão orçadas após o diagnóstico."].join("\n\n");
   if (data.servico==="Instalação de ventilador de teto" || data.servico==="Instalação elétrica para ar-condicionado") return null;
   if (data.servico.startsWith("Instalação") && /fachada|andaime|rapel|precis[ao] (?:puxar|instalar) (?:o )?220/.test(detail)) return null;
   if (data.servico.startsWith("Instalação") && /split/.test(detail))
-    return "❄️ *Instalação padrão de split*\nInclui fixação, interligação, teste de estanqueidade, vácuo e teste de funcionamento. O cliente fornece o aparelho e os materiais. Acesso especial e adequação elétrica exigem avaliação separada.\n*Mão de obra estimada · R$ 650,00 por aparelho*";
+    return ["❄️ *Instalação padrão de split*","Trabalhamos com instalação profissional, prezando pela segurança, eficiência e durabilidade do equipamento.","🔧 *Procedimentos inclusos:*","📍 Posicionamento e fixação das unidades interna e externa.","🔩 Interligação das tubulações frigoríficas.","⚡ Interligação elétrica entre as unidades.","💧 Instalação e teste do dreno.","🛡️ Teste de estanqueidade para verificar possíveis vazamentos.","🔬 Processo de vácuo para remover ar e umidade do sistema.","🌡️ Teste de funcionamento e conferência final.","━━━━━━━━━━━━━━━━","💰 *Investimento*","*Mão de obra estimada · R$ 650,00 por aparelho*","📦 O cliente fornece o aparelho e os materiais. Podemos também orçar o fornecimento dos materiais.","🛠️ Acesso especial e adequação elétrica exigem avaliação separada."].join("\n\n");
   if (data.servico.startsWith("Limpeza") && /acesso dificil|dificil acesso|fachada|andaime|rapel|nao (?:e |tem )?(?:de )?facil acesso/.test(detail)) return null;
   if (data.servico.startsWith("Limpeza") && /janela|split/.test(detail)) {
     const unit=/janela/.test(detail)?"R$ 250,00":/\b9\s*(mil|k|[., ]?000)\b/.test(detail)?"R$ 280,00":"";
-    if (unit) return "❄️ *Higienização profunda de ar-condicionado*\n"+(data.higienizacaoExplicada?"Desmontagem técnica, lavagem individual das peças, higienização das unidades evaporadora e condensadora, limpeza da drenagem, remontagem e testes, conforme explicado acima.":cleaningProcedure(detail))+"\n\n*Investimento · "+unit+" por aparelho*";
+    if (unit) return "❄️ *Higienização profunda de ar-condicionado*\n\n"+cleaningProcedure(detail)+"\n\n━━━━━━━━━━━━━━━━\n\n💰 *Investimento · "+unit+" por aparelho*";
   }
   return null;
 }
@@ -451,7 +451,7 @@ function guidedStep(stage,data,raw,t) {
     const message=estimate
       ? estimate+"\n\nEsse orçamento atende ao que você procura?"
       : "*Orçamento sob avaliação*\nLeonardo vai conferir os detalhes e informar mão de obra, materiais e total. Quer seguir com a solicitação de avaliação?";
-    return next("aceite_orcamento",message+"\nSe quiser agendar ou tiver alguma dúvida sobre o procedimento, pode me dizer por aqui. O responsável técnico também pode auxiliar.");
+    return next("aceite_orcamento",message+"\n\n😊 Se quiser agendar ou tiver alguma dúvida sobre o procedimento, pode me dizer por aqui. O responsável técnico também pode auxiliar.");
   }
   if(stage==="aceite_orcamento"){
     if(accepted || correctedNumber && /^((por mim )?pode (marcar|agendar)|sim|aceito)[,. ]+(mas )?(o )?numero/.test(t)){
