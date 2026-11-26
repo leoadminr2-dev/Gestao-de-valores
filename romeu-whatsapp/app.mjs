@@ -45,6 +45,8 @@ function parseQuote(phrase) {
   }
   return {action:'quote', client:header[1].trim(), items};
 }
+const COMPARISON_INTENT = /(?:\b(?:outros?|novos?|mais|demais)\s+(?:\w+\s+){0,2}(?:orcamentos?|cotacoes?|propostas?)\b|\b(?:pesquis\w*|compar\w*|busc\w*|procur\w*|peg\w*|faz\w*|solicit\w*|levant\w*|consult\w*)\s+(?:\w+\s+){0,4}(?:orcamentos|cotacoes|precos|valores|propostas)\b|\b(?:orcamento|cotacao|preco|valor)\s+(?:de|com|em)\s+outr[oa]s?\b)/;
+const COMPARISON_REPLY = "Entendemos perfeitamente! 😊\n\nÉ importante, sim, pesquisar e comparar orçamentos antes de contratar um serviço.\n\n⭐ *Confira nossas avaliações no Google:*\nhttps://share.google/QTqpyBWNP4QKaFm7C\n\nSão feedbacks de clientes que contrataram nossos serviços de instalação, higienização (lavação) e manutenção.\n\n🌐 *Conheça também nossa página:*\nhttps://headless-qqhigtkprnz-leoadminr2-140a.wix-site-host.com/\n\nPrezamos pela qualidade, pelos procedimentos técnicos, pela transparência e pela garantia dos nossos serviços.\n\nEstamos à disposição! 🤝\n\n❄️ *Leonardo Moreira Refrigeração*";
 const PAYMENT_METHODS = '💳 *FORMAS DE PAGAMENTO*\n\n💳 Cartão de crédito\n💳 Cartão de débito\n📲 Pix';
 const quoteNorm = value => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 function quoteProcedures(items) {
@@ -68,6 +70,7 @@ export function parse(input){
   const original=String(input||'').trim().slice(0,1500);
   const phrase=original.replace(/^romeu[,!?:\s]*/i,'').replace(/^anot[ae]\s+que\s+/i,'');
   const s=phrase.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  if (!/^(?:gastei|paguei|despesa|comprei|recebi|entrada|ganhei|tarefa|lembrar|nota|anotar|anota|registre|registrar|comprar|lista de compras|ideia|ideias|estudar|estudo)\b/.test(s) && COMPARISON_INTENT.test(s)) return {action:'comparisonReply'};
   const quote=parseQuote(phrase);
   if(quote)return String(input).trim().length>1500 ? {action:'quoteGuide'} : quote;
   if(!s)return {action:'unknown'};
@@ -91,6 +94,7 @@ export function parse(input){
   return {action:'unknown'};
 }
 export function reply(cmd,data={}){
+  if(cmd.action==='comparisonReply')return COMPARISON_REPLY;
   if(cmd.action==='quote')return quoteDraft(cmd);
   if(cmd.action==='paymentMethods')return PAYMENT_METHODS;
   if(cmd.action==='quoteGuide')return 'Preciso do cliente, da descrição, da quantidade e do preço por unidade para calcular. '+quoteExample;
