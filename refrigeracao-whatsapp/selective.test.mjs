@@ -53,6 +53,14 @@ test("primeiro olá de contato desconhecido não ativa", () => {
 test("primeiro pedido comercial ativa", () => {
   assert.equal(shouldHandleMessage({phone:"5521988887777",text:"conserto",now}), true);
 });
+test("porta comercial acolhe saudações, preservando protegidos e atendimento humano",()=>{
+ for(const text of ["Oi","Olá!","Bom dia","Boa tarde, Leonardo!","Boa noite, tudo bem?"])
+  assert.equal(shouldHandleMessage({phone:"5521988887777",text,allowGreeting:true,now}),true,text);
+ for(const text of ["Tudo bem por aí?","Você vai ao churrasco?","Aqui é o Romeu, seu assistente particular"])
+  assert.equal(shouldHandleMessage({phone:"5521988887777",text,allowGreeting:true,now}),false,text);
+ assert.equal(shouldHandleMessage({phone:"5521988887777",text:"Oi",allowGreeting:true,protectedPhones:"5521988887777",now}),false);
+ assert.equal(shouldHandleMessage({phone:"5521988887777",text:"Oi",allowGreeting:true,session:{...commercialSession,mode:"human"},now}),false);
+});
 test("contato protegido nunca ativa mesmo falando sobre orçamento", () => {
   assert.equal(shouldHandleMessage({
     phone:"5521988887777",text:"Orçamento de geladeira",protectedPhones:"5521988887777",now
@@ -111,3 +119,4 @@ test("compra e venda de equipamento ativam o atendimento comercial",()=>{
  for(const text of ["Você compra máquina de lavar??","Vocês compram geladeira?","Venda de máquina de lavar","Vendo uma lavadora"])
   assert.equal(isCommercialIntent(text),true,text);
 });
+

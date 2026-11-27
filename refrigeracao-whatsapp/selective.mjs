@@ -66,7 +66,7 @@ export function shouldPauseForManualReply(session, now = Date.now()) {
 
 export function shouldHandleMessage({
   phone, messageType = "text", text = "", session = null,
-  protectedPhones = "", now = Date.now()
+  protectedPhones = "", allowGreeting = false, now = Date.now()
 }) {
   if (isProtectedPhone(phone, protectedPhones)) return false;
 
@@ -83,5 +83,9 @@ export function shouldHandleMessage({
     return recentlyActive && /^(menu|inicio|reiniciar|0)$/.test(normalizeText(text));
   }
   if (recentlyActive) return true;
-  return messageType === "text" && isCommercialIntent(text);
+  // Uma saudação curta pode iniciar o acolhimento comercial, sem classificar
+  // frases pessoais ou respostas de outros assistentes como novos clientes.
+  const greeting = /^(?:(?:oi|ola|bom dia|boa tarde|boa noite)(?: leonardo)?(?: tudo bem)?|tudo bem)$/.test(normalizeText(text));
+  return messageType === "text" && (isCommercialIntent(text) || (allowGreeting && greeting));
 }
+

@@ -19,7 +19,7 @@ const YCLOUD_WEBHOOK_SECRET=process.env.YCLOUD_WEBHOOK_SECRET||"";
 const YCLOUD_API_KEY=process.env.YCLOUD_API_KEY||"";
 const YCLOUD_SENDER_NUMBER=process.env.YCLOUD_SENDER_NUMBER||"";
 // Números pessoais ficam no Render, nunca no código/repositório.
-const WHATSAPP_PRIVATE_PHONES=process.env.WHATSAPP_PRIVATE_PHONES||"";
+const WHATSAPP_PRIVATE_PHONES=[process.env.WHATSAPP_PRIVATE_PHONES||"",process.env.WHATSAPP_ASSISTANT_PHONES||""].filter(Boolean).join(",");
 const YCLOUD_AUTOREPLY_ENABLED=process.env.YCLOUD_AUTOREPLY_ENABLED==="true";
 // Guardrail: real customers remain unaffected until explicit production release.
 const YCLOUD_TEST_MODE=process.env.YCLOUD_TEST_MODE!=="false";
@@ -40,7 +40,7 @@ const technical=createTechnicalMode(pool);
 const protectedPhone=phone=>isProtectedPhone(phone,WHATSAPP_PRIVATE_PHONES);
 function eligible(phone,incoming,session,active){
  if(protectedPhone(phone))return false;
- const normal=shouldHandleMessage({phone,messageType:incoming.type,text:incoming.text,session,protectedPhones:WHATSAPP_PRIVATE_PHONES});
+ const normal=shouldHandleMessage({phone,messageType:incoming.type,text:incoming.text,session,protectedPhones:WHATSAPP_PRIVATE_PHONES,allowGreeting:true});
  if(normal)return true;
  return Boolean(active && session?.mode!=="human" && session?.stage!=="outro_assunto" && ["text","image","video","interactive","button","audio","document"].includes(incoming.type));
 }
@@ -397,3 +397,4 @@ if(metaReady||ycloudReady){
   setTimeout(()=>{void tick();},5000).unref();
   setInterval(()=>{void tick();},10*60*1000).unref();
 }
+
