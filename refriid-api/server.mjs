@@ -88,7 +88,7 @@ export async function createApp({ db, env = process.env, fetcher = fetch }) {
   async function syncPayment(id, known) {
     const payment = await mp('/v1/payments/' + encodeURIComponent(id));
     if (String(payment.collector_id) !== SELLER || String(payment.application_id) !== APPLICATION ||
-        payment.currency_id !== 'BRL' || Math.round(Number(payment.transaction_amount) * 100) !== 1990 ||
+        payment.currency_id !== 'BRL' || Math.round(Number(payment.transaction_amount) * 100) !== Math.round(PRICE * 100) ||
         payment.live_mode !== true) fail(422, 'Pagamento incompatível com RefriID.');
     // A payment must be bound through an invoice retrieved from MP, not a supplied external reference.
     let subscription = known;
