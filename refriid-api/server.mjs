@@ -39,6 +39,17 @@ export async function createApp({ db, env = process.env, fetcher = fetch }) {
       headers: { 'Content-Type': 'application/json', ...options.headers,
         Authorization: 'Bearer ' + unseal(row.encrypted_token, master) } }, fetcher);
   };
+  // Read-only provider connectivity check. No customer, subscription or payment is created.
+  if (await config()) {
+    try {
+      const me = await mp('/users/me');
+      if (String(me.id) !== SELLER || me.site_id !== 'MLB') throw Error('wrong seller');
+      await mp('/preapproval/search?limit=1');
+      console.log('RefriID: consulta autenticada de assinaturas Mercado Pago confirmada; nenhuma cobrança criada.');
+    } catch {
+      console.warn('RefriID: consulta de assinaturas não confirmada; mantenha cobrança em homologação.');
+    }
+  }
   const authenticate = async req => {
     const token = (req.headers.authorization || '').replace(/^Bearer /i, '');
     if (!token || token.length > 16000) fail(401, 'Entre na sua conta RefriID.');
@@ -57,7 +68,8 @@ export async function createApp({ db, env = process.env, fetcher = fetch }) {
     const stored = await one('SELECT * FROM refri_subscriptions WHERE id = $1', [id]);
     if (!stored) return;
     const sub = checkSubscription(await mp('/preapproval/' + encodeURIComponent(id)), stored.member_id);
-    await db.query('UPDATE refri_subscriptions SET status = $2, checked_at = now() WHERE id = $1', [id, sub.status]);
+    const status = sub.status === 'canceled' ? 'cancelled' : sub.status;
+    await db.query('UPDATE refri_subscriptions SET status = $2 WHERE id = $1', [id, status]);
     // Reconcile invoices even when a notification is missed. Never accept browser payment claims.
     let offset = 0;
     for (let page = 0; page < 100; page++) {
@@ -70,6 +82,7 @@ export async function createApp({ db, env = process.env, fetcher = fetch }) {
       offset += count;
       if (!count || offset >= Number(invoices.paging?.total ?? count)) break;
     }
+    await db.query('UPDATE refri_subscriptions SET checked_at = now() WHERE id = $1', [id]);
     return sub;
   }
   async function syncPayment(id, known) {
@@ -95,8 +108,11 @@ export async function createApp({ db, env = process.env, fetcher = fetch }) {
   async function accountStatus(member, refresh = true) {
     await db.query('INSERT INTO refri_accounts (member_id) VALUES ($1) ON CONFLICT DO NOTHING', [member]);
     const account = await one('SELECT * FROM refri_accounts WHERE member_id = $1', [member]);
-    const subs = (await db.query('SELECT * FROM refri_subscriptions WHERE member_id = $1', [member])).rows;
-    if (refresh) for (const s of subs) if (Date.now() - new Date(s.checked_at).getTime() > 60000) await syncSubscription(s.id);
+    let subs = (await db.query('SELECT * FROM refri_subscriptions WHERE member_id = $1', [member])).rows;
+    if (refresh) {
+      for (const s of subs) if (Date.now() - new Date(s.checked_at).getTime() > 60000) await serialize(s.id, () => syncSubscription(s.id));
+      subs = (await db.query('SELECT * FROM refri_subscriptions WHERE member_id = $1', [member])).rows;
+    }
     const paid = await one(`SELECT max(p.paid_until) AS until FROM refri_payments p
       JOIN refri_subscriptions s ON s.id = p.subscription_id
       WHERE s.member_id = $1 AND p.status = 'approved'`, [member]);
@@ -309,11 +325,11 @@ export async function createApp({ db, env = process.env, fetcher = fetch }) {
         }
         if (req.method === 'POST' && url.pathname === '/api/billing/cancel') {
           return await serialize(member, async () => {
-            const subs = (await db.query("SELECT * FROM refri_subscriptions WHERE member_id = $1 AND status != 'cancelled'", [member])).rows;
+            const subs = (await db.query("SELECT * FROM refri_subscriptions WHERE member_id = $1 AND status NOT IN ('cancelled','canceled')", [member])).rows;
             for (const sub of subs) {
               checkSubscription(await mp('/preapproval/' + sub.id), member);
               const result = await mp('/preapproval/' + sub.id, { method: 'PUT', body: JSON.stringify({ status: 'cancelled' }) });
-              if (result.status !== 'cancelled') fail(502, 'Cancelamento ainda não confirmado.');
+              if (!['cancelled','canceled'].includes(result.status)) fail(502, 'Cancelamento ainda não confirmado.');
               await db.query("UPDATE refri_subscriptions SET status = 'cancelled', checked_at = now() WHERE id = $1", [sub.id]);
             }
             return send(200, { cancelled: true, ...await accountStatus(member, false) });
