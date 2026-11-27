@@ -312,7 +312,7 @@ export async function createApp({ db, env = process.env, fetcher = fetch }) {
             const start = new Date(Math.max(new Date(account.trial_until).getTime(), Date.now() + 120000)).toISOString();
             const notificationUrl = origin + '/webhooks/' + env.WEBHOOK_TOKEN;
             const sub = await mp('/preapproval?notification_url=' + encodeURIComponent(notificationUrl), {
-              method: 'POST', body: JSON.stringify({ reason: 'RefriID • Plano Fundadores',
+              method: 'POST', body: JSON.stringify({ reason: 'RefriID • Plano Profissional',
                 external_reference: 'refriid:' + member, payer_email: email,
                 auto_recurring: { frequency: 1, frequency_type: 'months', start_date: start, transaction_amount: PRICE, currency_id: 'BRL' },
                 back_url: ORIGIN + '/comercial.html?assinatura=retorno', status: 'pending' }) });
