@@ -4,7 +4,7 @@ export const SITE = '20eb7440-0899-4a5c-a8db-c1d850817b79';
 export const CLIENT = '6b69e15d-6084-4999-a62a-73c46f308bcf';
 export const APPLICATION = '3973755243076236';
 export const SELLER = '81128886';
-export const PRICE = 19.90;
+export const PRICE = 29.90;
 export const ORIGIN = 'https://headless-ynataurgyhy-leoadminr2-140a.wix-site-host.com';
 
 export function fail(status, message) { throw Object.assign(new Error(message), { status }); }
@@ -37,7 +37,7 @@ export function checkSubscription(s, account) {
   const r = s.auto_recurring;
   if (String(s.application_id) !== APPLICATION || String(s.collector_id) !== SELLER ||
       s.external_reference !== 'refriid:' + account || !r || r.currency_id !== 'BRL' ||
-      Math.round(Number(r.transaction_amount) * 100) !== 1990 ||
+      Math.round(Number(r.transaction_amount) * 100) !== Math.round(PRICE * 100) ||
       r.frequency !== 1 || r.frequency_type !== 'months') fail(422, 'Assinatura fora da configuração RefriID.');
   return s;
 }
