@@ -16,6 +16,22 @@ export async function createApp({ db, env = process.env, fetcher = fetch }) {
   const setupScript = await readFile(new URL('./setup.js', import.meta.url));
   const one = async (sql, args = []) => (await db.query(sql, args)).rows[0];
   const config = () => one('SELECT encrypted_token FROM refri_config WHERE id = true');
+  // Optional secure credential handoff through Render's environment dashboard.
+  // Never print, return, or overwrite a saved credential.
+  const fromEnv = env.MERCADO_PAGO_ACCESS_TOKEN;
+  if (fromEnv && !await config()) {
+    try {
+      if (!/^APP_USR-[A-Za-z0-9-]{20,500}$/.test(fromEnv)) throw Error('Invalid credential');
+      const me = await jsonFetch('https://api.mercadopago.com/users/me', {
+        headers: { Authorization: 'Bearer ' + fromEnv } }, fetcher);
+      if (String(me.id) !== SELLER || me.site_id !== 'MLB') throw Error('Wrong account');
+      await db.query('INSERT INTO refri_config (id, encrypted_token, seller_id) VALUES (true, $1, $2) ON CONFLICT DO NOTHING',
+        [seal(fromEnv, master), SELLER]);
+      console.log('RefriID: credencial de produção armazenada com criptografia e titular validado.');
+    } catch {
+      console.warn('RefriID: credencial não validada; cobrança permanece bloqueada.');
+    }
+  }
   const mp = async (path, options = {}) => {
     const row = await config();
     if (!row) fail(503, 'Mercado Pago ainda não configurado.');
@@ -254,7 +270,7 @@ export async function createApp({ db, env = process.env, fetcher = fetch }) {
       }
       if (url.pathname.startsWith('/api/')) {
         const member = await authenticate(req);
-        if (!live) return send(503, { message: 'Integração em homologação. Nenhuma cobrança está habilitada.', allowed: false });
+        if (!live || !await config()) return send(503, { message: 'Integração em homologação. Nenhuma cobrança está habilitada.', allowed: false });
         if (req.method === 'POST' && url.pathname === '/api/data') {
           const state = await accountStatus(member);
           if (!state.allowed) return send(402, { message: 'Assinatura necessária para acessar o sistema.', ...state });
@@ -283,7 +299,7 @@ export async function createApp({ db, env = process.env, fetcher = fetch }) {
               method: 'POST', body: JSON.stringify({ reason: 'RefriID • Plano Fundadores',
                 external_reference: 'refriid:' + member, payer_email: email,
                 auto_recurring: { frequency: 1, frequency_type: 'months', start_date: start, transaction_amount: PRICE, currency_id: 'BRL' },
-                back_url: ORIGIN + '/?assinatura=retorno', status: 'pending' }) });
+                back_url: ORIGIN + '/comercial.html?assinatura=retorno', status: 'pending' }) });
             checkSubscription(sub, member);
             if (!/^https:\/\/www\.mercadopago\.com\.br\//.test(sub.init_point || '')) fail(502, 'Checkout brasileiro não confirmado.');
             await db.query('INSERT INTO refri_subscriptions (id, member_id, status, checkout_url) VALUES ($1, $2, $3, $4)',
