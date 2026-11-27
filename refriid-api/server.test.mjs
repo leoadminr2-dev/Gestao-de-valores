@@ -39,7 +39,7 @@ test('pending or cancelled subscriptions never grant indefinite access', () => {
 });
 test('seller, application, member, price, currency and recurrence must all match', () => {
   const valid = { application_id: Number(APPLICATION), collector_id: Number(SELLER),
-    external_reference: 'refriid:' + member, auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: 19.9, currency_id: 'BRL' } };
+    external_reference: 'refriid:' + member, auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: 29.90, currency_id: 'BRL' } };
   assert.equal(checkSubscription(valid, member), valid);
   for (const patch of [{ application_id: 1 }, { collector_id: 1 }, { external_reference: 'refriid:another' },
     { auto_recurring: { ...valid.auto_recurring, transaction_amount: 0.01 } },
